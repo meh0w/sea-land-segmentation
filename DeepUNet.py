@@ -64,7 +64,7 @@ def get_model(input_size):
 
     temp = up_block(temp, bn1, 32)
     score1 = Conv2D(2, (1,1), padding='valid', data_format='channels_first')(temp)
-    net1 = Softmax(axis=2)(score1)
+    net1 = Softmax(axis=1)(score1)
 
 
     # model = Model(inputs=nn_in, outputs=[net1, net2, net3, net4], name="DeepUNet")

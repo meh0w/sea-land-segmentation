@@ -16,17 +16,16 @@ data_loader = DataLoader(img_files, label_files, BATCH_SIZE)
 
 m = get_model(data_loader.input_size)
 
-opt = Adam(learning_rate=0.001)
-m.compile(optimizer='adam', loss="categorical_crossentropy", metrics=['accuracy'])
-m.fit(x=data_loader, epochs=1)
+opt = Adam(learning_rate=0.0001, clipnorm=1.0, clipvalue=0.5)
+m.compile(optimizer=opt, loss="categorical_crossentropy", metrics=['accuracy'])
+m.fit(x=data_loader, epochs=5)
 
 res = m.predict(x=data_loader)
 labs = [to_sparse(np.load(label)[0]) for label in data_loader.labels]
 
-fig, ax = plt.subplots(5,1)
+fig, ax = plt.subplots(5)
 for i, im in enumerate(res):
-    ax[i, 0].imshow(np.argmax(im, 0))
+    ax[i].imshow(np.argmax(im, 0))
     if i == 4:
         break
 plt.show()
-print('a')

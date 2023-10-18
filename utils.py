@@ -1,6 +1,6 @@
 import numpy as np
 import os
-from tifffile import tifffile
+# from tifffile import tifffile
 
 def to_sparse(im):
     sparse_im = np.zeros((2,)+im.shape)
