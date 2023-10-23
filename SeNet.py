@@ -15,36 +15,7 @@ import numpy as np
 """
 
 def unpool(pool, ind, ksize=[1, 2, 2, 1], output_shape=None, b_size=1, scope='unpool'):
-    """
-       Unpooling layer after max_pool_with_argmax.
-       Args:
-           pool:   max pooled output tensor
-           ind:      argmax indices
-           ksize:     ksize is the same as for the pool
-       Return:
-           unpool:    unpooling tensor
-    """
-    with tf.name_scope(scope):
-        input_shape = tf.shape(pool)
-
-        flat_input_size = tf.reduce_prod(input_shape)
-        flat_output_shape = [output_shape[0], output_shape[1] * output_shape[2] * output_shape[3]]
-
-        pool_ = tf.reshape(pool, [flat_input_size])
-        batch_range = tf.reshape(tf.range(tf.cast(output_shape[0], tf.int64), dtype=ind.dtype),
-                                          shape=[input_shape[0], 1, 1, 1])
-        b = tf.ones_like(ind) * batch_range
-        b1 = tf.reshape(b, [flat_input_size, 1])
-        ind_ = tf.reshape(ind, [flat_input_size, 1])
-        ind_ = tf.concat([b1, ind_], 1)
-
-        ret = tf.scatter_nd(ind_, pool_, shape=tf.cast(flat_output_shape, tf.int64))
-        ret = tf.reshape(ret, output_shape)
-
-        set_input_shape = pool.get_shape()
-        set_output_shape = output_shape
-        ret.set_shape(set_output_shape)
-        return ret
+    return UpSampling2D(size=(2,2), interpolation='nearest')(pool)
 
 def bn_relu(inputs):
     x = BatchNormalization()(inputs)
@@ -102,6 +73,6 @@ def get_model(input_size, batch_size):
 
     smax = Softmax()(con)
 
-    model = Model(inputs=nn_in, outputs=smax, name="model")
+    model = Model(inputs=nn_in, outputs=con, name="model")
 
     return model
