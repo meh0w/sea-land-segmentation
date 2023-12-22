@@ -71,8 +71,8 @@ def get_model(input_size, batch_size):
 
     con = Conv2D(2, (3,3), strides=(1,1), padding='same', data_format='channels_last')(dcbnr_7)
 
-    smax = Softmax()(con)
+    smax = Softmax(axis=-1)(con)
 
-    model = Model(inputs=nn_in, outputs=con, name="model")
+    model = Model(inputs=nn_in, outputs=smax, name="model")
 
     return model

@@ -6,6 +6,8 @@ def to_sparse(im):
     sparse_im = np.zeros((2,)+im.shape)
     idx = np.argwhere(im == 1)
     sparse_im[1, idx[:,0], idx[:,1]] = 1
+    idx = np.argwhere(im == 0)
+    sparse_im[0, idx[:,0], idx[:,1]] = 1
 
     return sparse_im
 
@@ -39,15 +41,15 @@ def load_data(path, part):
 
     return ims, labs
 
-def get_file_names(path):
+def get_file_names(path, extension):
 
     ims, labs = [], []
     for file in os.listdir(rf'{path}/images'):
-        if file.endswith('.npy'):
+        if file.endswith(extension):
             ims.append(rf'{path}/images/{file}')
 
     for file in os.listdir(rf'{path}/labels'):
-        if file.endswith('.npy'):
+        if file.endswith(extension):
             labs.append(rf'{path}/labels/{file}')
 
     return np.asarray(ims), np.asarray(labs)
