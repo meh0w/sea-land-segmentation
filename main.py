@@ -1,20 +1,19 @@
 import numpy as np
-from SeNet import get_model
+from DeepUNet import get_model
 import os
 import matplotlib.pyplot as plt
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.losses import CategoricalCrossentropy
-import sklearn
 from generator import DataLoader
 from utils import get_file_names, to_sparse
 from tensorflow.keras.layers import Softmax
-from metrics import IoU, dice_coeff
+from metrics import IoU, dice_coeff, accuracy, all_metrics
 import wandb
 from keras.callbacks import Callback
-from losses import SeNet_loss, dummy
+from losses import SeNet_loss, dummy, Sobel_loss, Sorensen_Dice, Sorensen_Dice2, Weighted_Dice, Weighted_Dice2
 
 PATH = rf'.\sample\train'
-EPOCHS = 1000
+EPOCHS = 3
 BATCH_SIZE = 4
 LEARNING_RATE = 0.000001
 TRAIN_PART = 0.7
@@ -22,6 +21,7 @@ TRAIN_PART = 0.7
 BEST_WEIGHTS = None
 BEST_IOU = 0
 BEST_EPOCH = 0
+DEBUG = False
 
 class MetricsCallback(Callback):
     def on_epoch_end(self, epoch, logs=None):
@@ -29,74 +29,63 @@ class MetricsCallback(Callback):
 
         pred = np.argmax(res, 3)
         real = np.argmax(labs_valid, 1)
-        iou_valid = IoU(pred, real)
+        metrics_val = all_metrics(pred, real, "[VAL]")
 
         res = self.model.predict(x=data_loader_train)
 
         pred = np.argmax(res, 3)
         real = np.argmax(labs_train, 1)
-        iou_train = IoU(pred, real)
-        # dice_ = dice_coeff(pred, real)
-        
-        wandb.log(
-            {
-            f'IoU mean val': np.mean(np.mean(iou_valid, axis=0)),
-            f'IoU land val': np.mean(iou_valid[0]),
-            f'IoU water val': np.mean(iou_valid[1]),
+        metrics_train = all_metrics(pred, real, "[TRAIN]")
+        metrics = dict(metrics_val, **metrics_train)
+        metrics['[TRAIN] loss'] = logs['loss']
+        metrics['[VAL] loss'] = logs['val_loss']
 
-            f'IoU mean train': np.mean(np.mean(iou_train, axis=0)),
-            f'IoU land train': np.mean(iou_train[0]),
-            f'IoU water train': np.mean(iou_train[1]),
-            f'Training loss': logs['loss'],
-            f'Validation loss': logs['val_loss'],
-            # f'Dice mean': np.mean(dice_),
-            # f'Dice land': dice_[0],
-            # f'Dice water': dice_[1]
-             }
+        wandb.log(
+            metrics
             )
         global BEST_IOU
-        if np.mean(iou_valid) > BEST_IOU:
+        if metrics["[VAL] IoU mean"] > BEST_IOU:
             global BEST_WEIGHTS, BEST_EPOCH
             BEST_WEIGHTS = self.model.get_weights()
-            BEST_IOU = np.mean(iou_valid)
+            BEST_IOU = metrics["[VAL] IoU mean"]
             BEST_EPOCH = epoch
 
         elif epoch - BEST_EPOCH > 50:
             self.model.stop_training = True
 
-        if np.mean(iou_valid) > 0.95:
-            os.makedirs(f'./weights/SeNet/02_11_2023', exist_ok=True)
-            self.model.save_weights(f'./weights/SeNet/02_11_2023/{np.mean(iou_valid):.6f}.h5')
+        if metrics["[VAL] IoU mean"] > 0.95:
+            os.makedirs(f'./weights/DeepUNet/24_12_2023', exist_ok=True)
+            self.model.save_weights(f'./weights/DeepUNet/24_12_2023/{metrics["[VAL] IoU mean"]:.6f}.h5')
             # self.model.stop_training = True
 
 
-# # # start a new wandb run to track this script
-wandb.init(
-    # set the wandb project where this run will be logged
-    project="Masters thesis",
-    
-    # track hyperparameters and run metadata
-    config={
-    "learning_rate": LEARNING_RATE,
-    "architecture": "SeNet",
-    "dataset": "SWED",
-    "epochs": EPOCHS,
-    "batch_size": BATCH_SIZE
-    }
-)
-
+if not DEBUG:
+    # # # start a new wandb run to track this script
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="Masters thesis",
+        
+        # track hyperparameters and run metadata
+        config={
+        "learning_rate": LEARNING_RATE,
+        "architecture": "DeepUNet",
+        "dataset": "SWED",
+        "epochs": EPOCHS,
+        "batch_size": BATCH_SIZE
+        }
+    )
 
 img_files, label_files = get_file_names(PATH, '.npy')
 idx = np.random.choice(np.arange(len(img_files)), int(np.floor(len(img_files)*TRAIN_PART)), replace=False)
 
-data_loader_train = DataLoader(img_files[idx], label_files[idx], BATCH_SIZE, True)
-data_loader_valid = DataLoader(np.delete(img_files, idx), np.delete(label_files, idx), BATCH_SIZE, True)
+data_loader_train = DataLoader(img_files[idx], label_files[idx], BATCH_SIZE, False)
+data_loader_valid = DataLoader(np.delete(img_files, idx), np.delete(label_files, idx), BATCH_SIZE, False)
 
 m = get_model(data_loader_train.input_size, BATCH_SIZE)
 
 metrics_callback = MetricsCallback()
 # loss = CategoricalCrossentropy()
-loss = SeNet_loss()
+loss = Sorensen_Dice()
 opt = Adam(learning_rate=LEARNING_RATE)
 labs_train = np.asarray([to_sparse(np.load(label)[0]) for label in data_loader_train.labels])
 labs_valid = np.asarray([to_sparse(np.load(label)[0]) for label in data_loader_valid.labels])
@@ -121,8 +110,6 @@ for i, im in enumerate(predicted):
     if i == 4:
         break
 
-iou = np.mean(IoU(predicted, real))
-dice = np.mean(dice_coeff(predicted, real))
 plt.show()
 os.makedirs(f'./weights/SeNet/02_11_2023', exist_ok=True)
 m.save_weights(f'./weights/SeNet/02_11_2023/final_SeNet.h5')
