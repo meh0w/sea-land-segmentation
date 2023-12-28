@@ -41,35 +41,57 @@ class SeNet_loss(tf.keras.losses.Loss):
 
 
 class Sorensen_Dice(tf.keras.losses.Loss):
-
+  @tf.function
   def call(self, y_true, y_pred):
         epsilon = 1e-9
         return tf.reduce_mean(1 - ((2*tf.reduce_sum(y_true*y_pred, axis=(1,2,3))+epsilon)/(tf.reduce_sum(y_true+y_pred, axis=(1,2,3))+epsilon)))
 
 
+def sob(image):
+  sobel_x = tf.constant([[[[-1, -1], [-1, -1]], [[0, 0], [0, 0]], [[1, 1], [1, 1]]], [[[-2, -2], [-2, -2]], [[0, 0], [0, 0]], [[2, 2], [2, 2]]], [[[-1, -1], [-1, -1]], [[0, 0], [0, 0]], [[1, 1], [1, 1]]]], tf.float32)
+  sobel_x_filter = tf.reshape(sobel_x, [3, 3, 2, 2])
+  sobel_y_filter = tf.transpose(sobel_x_filter, [1, 0, 2, 3])
+
+  filtered_x = tf.nn.conv2d(image, sobel_x_filter,
+                            strides=[1, 1, 1, 1], padding='SAME')
+  filtered_y = tf.nn.conv2d(image, sobel_y_filter,
+                            strides=[1, 1, 1, 1], padding='SAME')
+  
+
+
 class Sobel_loss(tf.keras.losses.Loss):
     def call(self, y_true, y_pred):
-        Gx_kernel = tf.constant(np.array([[[1,0,-1],[2,0,-2],[1, 0, -1]]]*2, dtype=np.float32).reshape(3, 3, 2, 1))
-        Gy_kernel = tf.constant(np.array([[[1,0,-1],[2,0,-2],[1, 0, -1]]]*2, dtype=np.float32).reshape(3, 3, 2, 1))
+        Gx_kernel = tf.constant([[[[-1]], [[0]], [[1]]], [[[-2]], [[0]], [[2]]], [[[-1]], [[0]], [[1]]]], tf.float32)
+        # Gx_kernel = tf.constant([[[[-1], [-1]], [[0], [0]], [[1], [1]]], [[[-2], [-2]], [[0], [0]], [[2], [2]]], [[[-1], [-1]], [[0], [0]], [[1], [1]]]], tf.float32)
+        # Gx_kernel = tf.constant([[[[-1, -1], [-1, -1]], [[0, 0], [0, 0]], [[1, 1], [1, 1]]], [[[-2, -2], [-2, -2]], [[0, 0], [0, 0]], [[2, 2], [2, 2]]], [[[-1, -1], [-1, -1]], [[0, 0], [0, 0]], [[1, 1], [1, 1]]]], tf.float32)
+        Gy_kernel = tf.transpose(Gx_kernel, [1, 0, 2, 3])
 
-        Gx_pred = tf.nn.conv2d(y_pred, Gx_kernel, strides=[1, 1, 1, 1], padding='VALID')
-        Gy_pred = tf.nn.conv2d(y_pred, Gy_kernel, strides=[1, 1, 1, 1], padding='VALID')
+        y_pred_ = tf.expand_dims(y_pred[:,:,:,0], -1)
+        y_true_ = tf.expand_dims(y_true[:,:,:,0], -1)
+        Gx_pred = tf.nn.conv2d(y_pred_, Gx_kernel, strides=[1, 1, 1, 1], padding='SAME')
+        Gy_pred = tf.nn.conv2d(y_pred_, Gy_kernel, strides=[1, 1, 1, 1], padding='SAME')
 
-        Gx_true = tf.nn.conv2d(y_true, Gx_kernel, strides=[1, 1, 1, 1], padding='VALID')
-        Gy_true = tf.nn.conv2d(y_true, Gy_kernel, strides=[1, 1, 1, 1], padding='VALID')
+        Gx_true = tf.nn.conv2d(y_true_, Gx_kernel, strides=[1, 1, 1, 1], padding='SAME')
+        Gy_true = tf.nn.conv2d(y_true_, Gy_kernel, strides=[1, 1, 1, 1], padding='SAME')
 
-        G_pred = tf.math.sqrt(Gx_pred**2 + Gy_pred**2)
-        G_true = tf.math.sqrt(Gx_true**2 + Gy_true**2)
+        G_pred = tf.math.sqrt(tf.math.square(Gx_pred) + tf.math.square(Gy_pred))
+        G_true = tf.math.sqrt(tf.math.square(Gx_true) + tf.math.square(Gy_true))
 
-        mse = tf.keras.losses.MeanSquaredError()
-        return mse(G_true, G_pred)
+        loss = tf.reduce_mean(tf.math.square(G_true-G_pred))
+        return loss
 
 
 class Weighted_Dice(tf.keras.losses.Loss):
+    @tf.function
     def call(self, y_true, y_pred):
         epsilon = 1e-9
-        Gx_kernel = tf.constant(np.array([[[1,0,-1],[2,0,-2],[1, 0, -1]]]*2, dtype=np.float32).reshape(3, 3, 2, 1))
-        Gy_kernel = tf.constant(np.array([[[1,0,-1],[2,0,-2],[1, 0, -1]]]*2, dtype=np.float32).reshape(3, 3, 2, 1))
+        Gx_kernel = tf.constant([[[[-1]], [[0]], [[1]]], [[[-2]], [[0]], [[2]]], [[[-1]], [[0]], [[1]]]], tf.float32)
+        # Gx_kernel = tf.constant([[[[-1], [-1]], [[0], [0]], [[1], [1]]], [[[-2], [-2]], [[0], [0]], [[2], [2]]], [[[-1], [-1]], [[0], [0]], [[1], [1]]]], tf.float32)
+        # Gx_kernel = tf.constant([[[[-1, -1], [-1, -1]], [[0, 0], [0, 0]], [[1, 1], [1, 1]]], [[[-2, -2], [-2, -2]], [[0, 0], [0, 0]], [[2, 2], [2, 2]]], [[[-1, -1], [-1, -1]], [[0, 0], [0, 0]], [[1, 1], [1, 1]]]], tf.float32)
+        Gy_kernel = tf.transpose(Gx_kernel, [1, 0, 2, 3])
+
+        y_pred = tf.expand_dims(y_pred[:,:,:,0], -1)
+        y_true = tf.expand_dims(y_true[:,:,:,0], -1)
 
         Gx_true = tf.nn.conv2d(y_true, Gx_kernel, strides=[1, 1, 1, 1], padding='SAME')
         Gy_true = tf.nn.conv2d(y_true, Gy_kernel, strides=[1, 1, 1, 1], padding='SAME')
