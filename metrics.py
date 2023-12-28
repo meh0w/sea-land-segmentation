@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 
 LAND = 0
 WATER = 1
@@ -180,17 +181,17 @@ def all_metrics(pred, real, prefix="", smooth=1e-9):
     kappa = ((intersect_water*intersect_land)-(exclusion_water*exclusion_land)+smooth) / (((intersect_water+exclusion_water)*(intersect_land+exclusion_water))+((intersect_water+exclusion_land)*(intersect_land+exclusion_land))+smooth)
 
     return {
-        f'{prefix} IoU land': np.mean(IoU_land),
-        f'{prefix} IoU water': np.mean(IoU_water),
-        f'{prefix} IoU mean': np.mean([np.mean(IoU_land), np.mean(IoU_water)]),
-        f'{prefix} Accuracy': np.mean(acc),
-        f'{prefix} Balanced accuracy': np.mean(balanced_acc),
-        f'{prefix} Precision': np.mean(prec),
-        f'{prefix} Recall': np.mean(rec),
-        f'{prefix} F1-score': np.mean(f1),
-        f'{prefix} Jaccard Index': np.mean(jacc),
-        f'{prefix} MCC': np.mean(mcc),
-        f'{prefix} Cohens Kappa': np.mean(kappa)
+        f'{prefix} IoU land': IoU_land,
+        f'{prefix} IoU water': IoU_water,
+        f'{prefix} IoU mean': tf.reduce_mean([IoU_land, IoU_water], axis=0).numpy() ,
+        f'{prefix} Accuracy': acc,
+        f'{prefix} Balanced accuracy': balanced_acc,
+        f'{prefix} Precision': prec,
+        f'{prefix} Recall': rec,
+        f'{prefix} F1-score': f1,
+        f'{prefix} Jaccard Index': jacc,
+        f'{prefix} MCC': mcc,
+        f'{prefix} Cohens Kappa': kappa
     }
 
 

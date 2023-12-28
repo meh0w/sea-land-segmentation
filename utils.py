@@ -1,6 +1,7 @@
 import numpy as np
 import os
 from tifffile import tifffile
+import matplotlib.pyplot as plt
 
 def to_sparse(im):
     sparse_im = np.zeros((2,)+im.shape)
@@ -41,20 +42,34 @@ def load_data(path, part):
 
     return ims, labs
 
-def get_file_names(path, extension):
+def get_file_names(path, extension, dataset="SWED"):
 
-    ims, labs = [], []
-    for file in os.listdir(rf'{path}/images'):
-        if file.endswith(extension):
-            ims.append(rf'{path}/images/{file}')
+    if dataset == "SWED":
+        ims, labs = [], []
+        for file in os.listdir(rf'{path}/images'):
+            if file.endswith(extension):
+                ims.append(rf'{path}/images/{file}')
 
-    for file in os.listdir(rf'{path}/labels'):
-        if file.endswith(extension):
-            labs.append(rf'{path}/labels/{file}')
+        for file in os.listdir(rf'{path}/labels'):
+            if file.endswith(extension):
+                labs.append(rf'{path}/labels/{file}')
+        return np.asarray(ims), np.asarray(labs)
+    elif dataset == "SNOWED":
+        # due to file structure we only need folder names
+        folders = os.listdir(path)
 
-    return np.asarray(ims), np.asarray(labs)
+        return np.asarray(folders)
 
 def shuffle(im, lab):
     p = np.random.permutation(len(im))
 
     return im[p], lab[p]
+
+def compare_imgs(im1, im2):
+    fig, ax = plt.subplots(1, 2)
+
+    ax[0].imshow(im1)
+    ax[1].imshow(im2)
+
+    plt.show()
+    
