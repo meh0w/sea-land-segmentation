@@ -3,9 +3,10 @@ import DeepUNet
 import DeepUNet2
 import SeNet
 import SeNet2
+import MU_Net
 
 import os
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.losses import CategoricalCrossentropy
 from generator import DataLoaderSWED, DataLoaderSNOWED
@@ -15,23 +16,25 @@ from metrics import IoU, dice_coeff, accuracy, all_metrics
 import wandb
 from keras.callbacks import Callback
 from losses import SeNet_loss, Sobel_loss, Sorensen_Dice, Weighted_Dice
-from time import time
+from time import time, sleep
+from datetime import datetime
+from tensorflow import stack
 
-if __name__ == '__main__':
+
+
+
+def run(c):
     try:
-        MODEL = 'SeNet2'
-        EPOCHS = 200
-        BATCH_SIZE = 20
-        LEARNING_RATE = 1e-4
-        TRAIN_PART = 0.7
+        MODEL = c['MODEL']
+        EPOCHS = c['EPOCHS']
+        BATCH_SIZE = c['BATCH_SIZE']
+        LEARNING_RATE = c['LEARNING_RATE']
+        TRAIN_PART = c['TRAIN_PART']
 
-        BEST_WEIGHTS = None
-        BEST_IOU = 0
-        BEST_EPOCH = 0
-        DEBUG = False
-        DATASET = "SWED"
-        LOSS = 'Weighted_Dice+Crossentropy'
-        METRICS = 'ALL'
+        DEBUG = c['DEBUG']
+        DATASET = c['DATASET']
+        LOSS = c['LOSS']
+        METRICS = c['METRICS']
 
         if DATASET == 'SWED':
             # PATH = rf'.\SWED\train'
@@ -88,7 +91,7 @@ if __name__ == '__main__':
                     BEST_IOU = metrics["[VAL] IoU mean"]
                     BEST_EPOCH = epoch
 
-                elif epoch - BEST_EPOCH > 50:
+                elif epoch - BEST_EPOCH > 20:
                     self.model.stop_training = True
 
                 if metrics["[VAL] IoU mean"] > 0.95:
@@ -167,18 +170,27 @@ if __name__ == '__main__':
                 "loss": LOSS
                 }
             )
+        biases = None
+        if MODEL == 'MU_Net':
+            b1 = MU_Net.get_bias()
+            b2 = MU_Net.get_bias()
+            b3 = MU_Net.get_bias()
+            b4 = MU_Net.get_bias()
+            b5 = MU_Net.get_bias()
+            b6 = MU_Net.get_bias()
+            biases = stack([b1,b2,b3,b4,b5,b6])
 
         if DATASET == 'SWED':
             img_files, label_files = get_file_names(PATH, '.npy', DATASET)
             idx = np.random.choice(np.arange(len(img_files)), int(np.floor(len(img_files)*TRAIN_PART)), replace=False)
-            data_loader_train = DataLoaderSWED(img_files[idx], label_files[idx], BATCH_SIZE, False)
-            data_loader_valid = DataLoaderSWED(np.delete(img_files, idx), np.delete(label_files, idx), BATCH_SIZE, False)
+            data_loader_train = DataLoaderSWED(img_files[idx], label_files[idx], BATCH_SIZE, False, biases)
+            data_loader_valid = DataLoaderSWED(np.delete(img_files, idx), np.delete(label_files, idx), BATCH_SIZE, False, biases)
 
         elif DATASET == 'SNOWED':
             img_files = get_file_names(PATH, '.npy', DATASET)
             idx = np.random.choice(np.arange(len(img_files)), int(np.floor(len(img_files)*TRAIN_PART)), replace=False)
-            data_loader_train = DataLoaderSNOWED(img_files[idx], BATCH_SIZE, False)
-            data_loader_valid = DataLoaderSNOWED(np.delete(img_files, idx), BATCH_SIZE, False)
+            data_loader_train = DataLoaderSNOWED(img_files[idx], BATCH_SIZE, False, biases)
+            data_loader_valid = DataLoaderSNOWED(np.delete(img_files, idx), BATCH_SIZE, False, biases)
 
         if MODEL == 'DeepUNet':
             m = DeepUNet.get_model(data_loader_train.input_size, BATCH_SIZE)
@@ -188,6 +200,15 @@ if __name__ == '__main__':
             m = SeNet.get_model(data_loader_train.input_size, BATCH_SIZE)
         elif MODEL == 'SeNet2':
             m = SeNet2.get_model(data_loader_train.input_size, BATCH_SIZE)
+        elif MODEL == 'MU_Net':
+            b1 = MU_Net.get_bias()
+            b2 = MU_Net.get_bias()
+            b3 = MU_Net.get_bias()
+            b4 = MU_Net.get_bias()
+            b5 = MU_Net.get_bias()
+            b6 = MU_Net.get_bias()
+            biases = stack([b1,b2,b3,b4,b5,b6])
+            m = MU_Net.get_model(data_loader_train.input_size, biases.shape, batch_size=BATCH_SIZE)
 
         if METRICS == 'ALL':
             metrics_callback = MetricsCallback()
@@ -220,7 +241,10 @@ if __name__ == '__main__':
         else:
             m.compile(optimizer=opt, loss=loss, loss_weights=loss_weights)
         # m.run_eagerly = True
-        print(f'WEIGHTS TO BE SAVED IN => ./weights/{MODEL}/27_12_2023 {LOSS} {DATASET} sample/BEST_DeepUNET.h5')
+        now = datetime.now()
+        RES_PATH_FOLDER = f'./weights/{MODEL}/{now.strftime("%Y-%m-%d %H_%M_%S")} {LOSS} {DATASET} {LEARNING_RATE:.0e} sample'
+        RES_PATH = f'{RES_PATH_FOLDER}/BEST_DeepUNET.h5'
+        print(f'WEIGHTS TO BE SAVED IN => {RES_PATH}')
         m.fit(x=data_loader_train ,epochs=EPOCHS, callbacks=[metrics_callback])
 
         # res = m.predict(x=data_loader_train)
@@ -237,18 +261,84 @@ if __name__ == '__main__':
         #     if i == 4:
         #         break
 
-        plt.plot([1,2,3])
-        plt.show()
+        # plt.plot([1,2,3])
+        # plt.show()
 
-        os.makedirs(f'./weights/{MODEL}/27_12_2023 {LOSS} {DATASET} sample/', exist_ok=True)
-        m.save_weights(f'./weights/{MODEL}/27_12_2023 {LOSS} {DATASET} sample/LAST_DeepUNET.h5')
+        os.makedirs(RES_PATH_FOLDER, exist_ok=True)
+        m.save_weights(rf'{RES_PATH_FOLDER}\LAST.h5')
 
         m.set_weights(BEST_WEIGHTS)
-        m.save_weights(f'./weights/{MODEL}/27_12_2023 {LOSS} {DATASET} sample/BEST_DeepUNET.h5')
+        m.save_weights(RES_PATH)
         print('a')
+        wandb.finish()
     except KeyboardInterrupt:
-        os.makedirs(f'./weights/{MODEL}/27_12_2023 {LOSS} {DATASET} sample/', exist_ok=True)
-        m.save_weights(f'./weights/{MODEL}/26_12_2023 {LOSS} {DATASET} sample/LAST_DeepUNET.h5')
+        os.makedirs(RES_PATH_FOLDER, exist_ok=True)
+        m.save_weights(rf'{RES_PATH_FOLDER}\LAST.h5')
 
         m.set_weights(BEST_WEIGHTS)
-        m.save_weights(f'./weights/{MODEL}/27_12_2023 {LOSS} {DATASET} sample/BEST_DeepUNET.h5')
+        m.save_weights(RES_PATH)
+
+
+if __name__ == '__main__':
+
+    configs = [
+        {
+        "MODEL": 'MU_Net',
+        "EPOCHS":  3,
+        "BATCH_SIZE": 10,
+        "LEARNING_RATE":  1e-6,
+        "TRAIN_PART":  0.7,
+
+        "DEBUG":  True,
+        "DATASET": "SWED",
+        "LOSS": 'CategoricalCrossentropy',
+        "METRICS": 'ALL',
+    },{
+        "MODEL": 'SeNet2',
+        "EPOCHS":  200,
+        "BATCH_SIZE": 20,
+        "LEARNING_RATE":  1e-6,
+        "TRAIN_PART":  0.7,
+
+        "DEBUG":  False,
+        "DATASET": "SWED",
+        "LOSS": 'Weighted_Dice+Crossentropy',
+        "METRICS": 'ALL',
+    },
+    {
+        "MODEL": 'DeepUNet2',
+        "EPOCHS":  200,
+        "BATCH_SIZE": 20,
+        "LEARNING_RATE":  1e-6,
+        "TRAIN_PART":  0.7,
+
+        "DEBUG":  False,
+        "DATASET": "SWED",
+        "LOSS": 'Weighted_Dice+Crossentropy',
+        "METRICS": 'ALL',
+    },
+        {
+        "MODEL": 'DeepUNet',
+        "EPOCHS":  200,
+        "BATCH_SIZE": 20,
+        "LEARNING_RATE":  1e-6,
+        "TRAIN_PART":  0.7,
+
+        "DEBUG":  False,
+        "DATASET": "SNOWED",
+        "LOSS": 'Weighted_Dice',
+        "METRICS": 'ALL',
+    }
+
+    ]
+    for cc in configs:
+        print(f'{cc["MODEL"]}| {cc["DATASET"]} | {cc["LOSS"]} | {cc["LEARNING_RATE"]}')
+    sleep(5)
+    
+
+    for configuration in configs:
+        BEST_WEIGHTS = None
+        BEST_IOU = 0
+        BEST_EPOCH = 0
+        run(configuration)
+        break
