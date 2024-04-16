@@ -2,7 +2,7 @@ import torch
 import matplotlib.pyplot as plt
 from pytorch_MU_NET import MUNet as MU_Net
 from pytorch_metrics import All_metrics
-from pytorch_generator import DataLoaderSNOWED, DataLoaderSWED
+from pytorch_generator import DataLoaderSNOWED, DataLoaderSWED, DataLoaderSWED_NDWI
 import os
 import pprint
 from tifffile import tifffile
@@ -44,7 +44,7 @@ def test(data_path, weights_path, data_loader, dataset, m, display, save, result
         print(entry['iou'])
     # for i in range(len(predicted)):
         if isinstance(dataset, DataLoaderSWED):
-            rgb = np.moveaxis(dataset[i][0].numpy(), 0, -1)
+            rgb = np.moveaxis(dataset[i][0].numpy(), 0, -1)[:,:,[0,1,2]]
             real = np.moveaxis(dataset[i][1].numpy(), 0, -1)
         else:
             rgb = dataset[i][0][0][:,:,:,[0,1,2]][0]
@@ -116,15 +116,18 @@ def test_one_folder(folder, result_folder=None):
         m = SeNet2.get_model(data_loader_train.input_size, BATCH_SIZE)
     elif 'MU_Net' in folder:
         # m = MU_Net([32,64,128,256], base_c=32, bilinear=False)
-        m = MU_Net()
+        m = MU_Net([4,64,128,256,512])
         m.to(device)
         m.load_state_dict(torch.load(weights))
+        print(f'Total params: {sum(p.numel() for p in m.parameters())}')
+        print(f'Trainable params: {sum(p.numel() for p in m.parameters() if p.requires_grad)}')
         
 
     if 'SWED' in folder:
         PATH = rf'.\SWED\test'
         img_files, label_files = get_file_names(PATH, '.tif', 'SWED')
-        data_set_test = DataLoaderSWED(img_files, label_files, False)
+        # data_set_test = DataLoaderSWED(img_files, label_files, False)
+        data_set_test = DataLoaderSWED_NDWI(img_files, label_files, False)
 
     elif 'SNOWED' in folder:
         PATH = rf'.\SNOWED_TEST'
@@ -152,7 +155,7 @@ if __name__ == '__main__':
     base = rf'weights\MU_Net\REPORT 09-03-2024'
     res = rf'plots\pytorch_test2'
     os.makedirs(res, exist_ok=True)
-    folder = rf'weights\MU_Net\2024-04-14 11_36_12 Dice+Crossentropy SWED 1e-03 sample'
+    folder = rf'weights\MU_Net\2024-04-14 20_18_09 Dice+Crossentropy SWED_FULL 1e-03 sample'
     test_one_folder(folder, res)
     # for folder in os.listdir(base):
     #     test_one_folder(rf'{base}\{folder}', res)

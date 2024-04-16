@@ -616,16 +616,16 @@ class UpsampleConv(nn.Module):
 
 
 class encoder(nn.Module):
-    def __init__(self, n_channels=3, encoder_channels=[64,128,256,512]):
+    def __init__(self, n_channels=3, encoder_channels=[3,64,128,256,512]):
         super(encoder, self).__init__()
-        self.inc = DoubleConv(n_channels, encoder_channels[0])
-        self.down1 = Down(encoder_channels[0], encoder_channels[1])
-        self.down2 = Down(encoder_channels[1], encoder_channels[2])
-        self.down3 = DownsampleConv(encoder_channels[2], encoder_channels[3])
-        self.down4 = DownsampleConv(encoder_channels[3], encoder_channels[3])
+        self.inc = DoubleConv(encoder_channels[0], encoder_channels[1])
+        self.down1 = Down(encoder_channels[1], encoder_channels[2])
+        self.down2 = Down(encoder_channels[2], encoder_channels[3])
+        self.down3 = DownsampleConv(encoder_channels[3], encoder_channels[4])
+        self.down4 = DownsampleConv(encoder_channels[4], encoder_channels[4])
 
-        self.e4 = BasicLayer(dim=encoder_channels[3], depth=2)
-        self.e5 = BasicLayer(dim=encoder_channels[3], depth=2)
+        self.e4 = BasicLayer(dim=encoder_channels[4], depth=2)
+        self.e5 = BasicLayer(dim=encoder_channels[4], depth=2)
     def forward(self, x):
         outs = []
         x1 = self.inc(x)
@@ -648,11 +648,11 @@ class encoder(nn.Module):
 
 
 class decoder(nn.Module):
-    def __init__(self, encoder_channels=[64,128,256,512],bilinear=True,base_c: int = 64):
+    def __init__(self, encoder_channels=[3,64,128,256,512],bilinear=True,base_c: int = 64):
         super(decoder, self).__init__()
         
         factor = 2 if bilinear else 1
-        self.d1 = BasicLayer(dim=encoder_channels[3] // factor, depth=2)
+        self.d1 = BasicLayer(dim=encoder_channels[4] // factor, depth=2)
         self.up1 = UpsampleConv(base_c * 16, base_c * 8 // factor, bilinear)
         self.up2 = Up(base_c * 8, base_c * 4 // factor, bilinear)
         self.up3 = Up(base_c * 4, base_c * 2 // factor, bilinear)
@@ -660,9 +660,9 @@ class decoder(nn.Module):
 
         self.segmentation_head = nn.Conv2d(base_c, 2, kernel_size=1)
 
-        self.attn1 = AMM(dim=encoder_channels[1])  # C2  128
-        self.attn2 = AMM(dim=encoder_channels[2])  # C3  256
-        self.attn3 = AMM(dim=encoder_channels[3])  # C4  512
+        self.attn1 = AMM(dim=encoder_channels[2])  # C2  128
+        self.attn2 = AMM(dim=encoder_channels[3])  # C3  256
+        self.attn3 = AMM(dim=encoder_channels[4])  # C4  512
     def forward(self,x,h,w):
         c1,c2,c3,c4,c5=x[:5]
         B, _, H, W = c5.shape
@@ -679,7 +679,7 @@ class decoder(nn.Module):
 
 
 class MUNet(nn.Module):
-    def __init__(self, encoder_channels=[64,128,256,512], base_c=64, bilinear=True):
+    def __init__(self, encoder_channels=[3,64,128,256,512], base_c=64, bilinear=True):
         super(MUNet, self).__init__()
         self.cnn_encoder=encoder(encoder_channels=encoder_channels)
         self.trans_decoder=decoder(encoder_channels=encoder_channels, base_c=base_c, bilinear=bilinear)

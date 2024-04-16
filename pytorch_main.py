@@ -2,7 +2,7 @@ import torch
 import wandb
 import os
 from pytorch_MU_NET import MUNet as MU_Net
-from pytorch_generator import DataLoaderSNOWED, DataLoaderSWED
+from pytorch_generator import DataLoaderSNOWED, DataLoaderSWED, DataLoaderSWED_NDWI, DataLoaderSWED_NDWI_np
 import numpy as np
 from utils import get_file_names
 from datetime import datetime
@@ -11,6 +11,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from pytorch_metrics import All_metrics, All_metrics_16
 from pytorch_losses import CEDice
+from copy import deepcopy
 
 def poly_scheduler(epoch):
     return 0.001*((1-(epoch/150))**0.9)
@@ -50,6 +51,7 @@ def run(c):
         WEIGHT_DECAY = c['WEIGHT_DECAY']
         NOTE = c['NOTE']
         PRECISION = c['PRECISION']
+        NDWI = c['NDWI']
 
         if DATASET == 'SWED':
             PATH = rf'.\sample\train'
@@ -75,15 +77,23 @@ def run(c):
                 "optimizer": OPTIMIZER,
                 "momentum": MOMENTUM,
                 "weight_decay": WEIGHT_DECAY,
-                "note": NOTE
+                "note": NOTE,
+                "NDWI": NDWI
                 }
             )
 
         if DATASET == 'SWED':
-            img_files, label_files = get_file_names(PATH, '.npy', DATASET)
-            idx = np.random.choice(np.arange(len(img_files)), int(np.floor(len(img_files)*TRAIN_PART)), replace=False)
-            data_set_train = DataLoaderSWED(img_files[idx], label_files[idx], False, precision=PRECISION)
-            data_set_valid = DataLoaderSWED(np.delete(img_files, idx), np.delete(label_files, idx), False, precision=PRECISION)
+            if NDWI:
+                img_files, label_files = get_file_names(PATH, '.npy', DATASET)
+                idx = np.random.choice(np.arange(len(img_files)), int(np.floor(len(img_files)*TRAIN_PART)), replace=False)
+                data_set_train = DataLoaderSWED_NDWI_np(img_files[idx], label_files[idx], False, precision=PRECISION)
+                data_set_valid = DataLoaderSWED_NDWI_np(np.delete(img_files, idx), np.delete(label_files, idx), False, precision=PRECISION)
+
+            else:
+                img_files, label_files = get_file_names(PATH, '.npy', DATASET)
+                idx = np.random.choice(np.arange(len(img_files)), int(np.floor(len(img_files)*TRAIN_PART)), replace=False)
+                data_set_train = DataLoaderSWED(img_files[idx], label_files[idx], False, precision=PRECISION)
+                data_set_valid = DataLoaderSWED(np.delete(img_files, idx), np.delete(label_files, idx), False, precision=PRECISION)
 
         elif DATASET == 'SNOWED':
             img_files = get_file_names(PATH, '.npy', DATASET)
@@ -92,10 +102,17 @@ def run(c):
             data_set_valid = DataLoaderSNOWED(np.delete(img_files, idx),False)
 
         elif DATASET == 'SWED_FULL':
-            img_files, label_files = get_file_names(PATH, '.npy', DATASET)
-            idx = np.random.choice(np.arange(len(img_files)), int(np.floor(len(img_files)*TRAIN_PART)), replace=False)
-            data_set_train = DataLoaderSWED(img_files[idx], label_files[idx], False, precision=PRECISION)
-            data_set_valid = DataLoaderSWED(np.delete(img_files, idx), np.delete(label_files, idx), False, precision=PRECISION)
+            if NDWI:
+                img_files, label_files = get_file_names(PATH, '.npy', DATASET)
+                idx = np.random.choice(np.arange(len(img_files)), int(np.floor(len(img_files)*TRAIN_PART)), replace=False)
+                data_set_train = DataLoaderSWED_NDWI_np(img_files[idx], label_files[idx], False, precision=PRECISION)
+                data_set_valid = DataLoaderSWED_NDWI_np(np.delete(img_files, idx), np.delete(label_files, idx), False, precision=PRECISION)
+
+            else:
+                img_files, label_files = get_file_names(PATH, '.npy', DATASET)
+                idx = np.random.choice(np.arange(len(img_files)), int(np.floor(len(img_files)*TRAIN_PART)), replace=False)
+                data_set_train = DataLoaderSWED(img_files[idx], label_files[idx], False, precision=PRECISION)
+                data_set_valid = DataLoaderSWED(np.delete(img_files, idx), np.delete(label_files, idx), False, precision=PRECISION)
 
         data_loader_train = DataLoader(data_set_train, batch_size=BATCH_SIZE, shuffle=True, pin_memory=True, num_workers=2)
         data_loader_valid = DataLoader(data_set_valid, batch_size=BATCH_SIZE, shuffle=True, pin_memory=True, num_workers=2)
@@ -110,7 +127,7 @@ def run(c):
             m = SeNet2.get_model(data_loader_train.input_size, BATCH_SIZE)
         elif MODEL == 'MU_Net':
             # m = MU_Net([32,64,128,256], base_c=32, bilinear=True)
-            m = MU_Net()
+            m = MU_Net(encoder_channels=[4,32,64,128,256], base_c = 32)
             m.to(device)
             if PRECISION == 16:
                 m.half()
@@ -233,7 +250,7 @@ def run(c):
                         metrics
                         )
                 if metrics["[VAL] IoU mean"] > BEST_IOU:
-                    BEST_WEIGHTS = m.state_dict()
+                    BEST_WEIGHTS = deepcopy(m.state_dict())
                     BEST_IOU = metrics["[VAL] IoU mean"]
                     BEST_EPOCH = epoch
 
@@ -277,14 +294,15 @@ if __name__ == '__main__':
         "TRAIN_PART":  0.7,
         "SCHEDULER": "poly",
         "DEBUG":  False,
-        "DATASET": "SWED",
+        "DATASET": "SWED_FULL",
         "LOSS": 'Dice+Crossentropy',
         "METRICS": 'BATCH',
         "OPTIMIZER": "Adam",
         "MOMENTUM": 0.9,
         "WEIGHT_DECAY": 1e-4,
-        "NOTE": 'softmax in loss no weight init',
-        "PRECISION": 32
+        "NOTE": 'softmax in loss no weight init encoder_channels=[4,32,64,128,256], base_c = 32',
+        "PRECISION": 32,
+        "NDWI": True,
         },
     ]
     for cc in configs:

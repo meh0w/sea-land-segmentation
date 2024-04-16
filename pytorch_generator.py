@@ -38,6 +38,40 @@ class DataLoaderSWED(Dataset):
             return torch.from_numpy(np.asarray([np.moveaxis(to_sparse(np.load(label)[0]),0,0) for label in self.labels[:self.__len__()*self.batch_size]])).to(self.precision)
         else:
             return torch.from_numpy(np.asarray([np.moveaxis(to_sparse(tifffile.imread(label)),0,0) for label in self.labels[:self.__len__()*self.batch_size]])).to(self.precision)
+        
+class DataLoaderSWED_NDWI(DataLoaderSWED):
+    def __init__(self, image_filenames, labels, input_in_labels=False, precision=32):
+        super().__init__(image_filenames, labels, input_in_labels=input_in_labels, precision=precision)
+
+    def transform(self, im):
+        im[3,:,:] = (im[1,:,:] - im[3,:,:] + 1e-9) / (im[1,:,:] + im[3,:,:] + 1e-9)
+        return im
+
+    def __getitem__(self, idx):
+        image = torch.from_numpy(self.transform(tifffile.imread(self.image_filenames[idx])[[3,2,1,7],:,:]/22_000)).to(self.precision)
+        label = torch.from_numpy(np.moveaxis(to_sparse(tifffile.imread(self.labels[idx])),0,0)).to(self.precision)
+
+        return image, label
+
+    def get_all_labels(self):
+        return torch.from_numpy(np.asarray([np.moveaxis(to_sparse(tifffile.imread(label)),0,0) for label in self.labels[:self.__len__()*self.batch_size]])).to(self.precision) 
+  
+class DataLoaderSWED_NDWI_np(DataLoaderSWED):
+    def __init__(self, image_filenames, labels, input_in_labels=False, precision=32):
+        super().__init__(image_filenames, labels, input_in_labels=input_in_labels, precision=precision)
+
+    def transform(self, im):
+        im[3,:,:] = (im[1,:,:] - im[3,:,:] + 1e-9) / (im[1,:,:] + im[3,:,:] + 1e-9)
+        return im
+    def __getitem__(self, idx):
+        image = torch.from_numpy(self.transform(np.moveaxis(np.load(self.image_filenames[idx]), 2, 0)[[3,2,1,7],:,:]/22_000)).to(self.precision)
+        label = torch.from_numpy(to_sparse(np.load(self.labels[idx])[0])).to(self.precision)
+
+        return image, label
+
+    def get_all_labels(self):
+        return torch.from_numpy(np.asarray([np.moveaxis(to_sparse(np.load(label)[0]),0,0) for label in self.labels[:self.__len__()*self.batch_size]])).to(self.precision)
+        
 class DataLoaderSNOWED(Dataset):
 
     def __init__(self, folder_names, batch_size, input_in_labels=False, root_path=rf'.\SNOWED\SNOWED'):
