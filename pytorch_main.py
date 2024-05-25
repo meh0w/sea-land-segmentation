@@ -2,6 +2,7 @@ import torch
 import wandb
 import os
 from pytorch_MU_NET import MUNet as MU_Net
+import pytorch_MU_NET_skip_concat as experimental
 from pytorch_generator import DataLoaderSNOWED, DataLoaderSWED, DataLoaderSWED_NDWI, DataLoaderSWED_NDWI_np
 import numpy as np
 from utils import get_file_names
@@ -127,7 +128,8 @@ def run(c):
             m = SeNet2.get_model(data_loader_train.input_size, BATCH_SIZE)
         elif MODEL == 'MU_Net':
             # m = MU_Net([32,64,128,256], base_c=32, bilinear=True)
-            m = MU_Net(encoder_channels=[4,32,64,128,256], base_c = 32)
+            # m = MU_Net(encoder_channels=[4,32,64,128,256], base_c = 32)
+            m = experimental.MUNet(encoder_channels=[4,8,16,32,64], base_c = 16)
             m.to(device)
             if PRECISION == 16:
                 m.half()
@@ -294,13 +296,13 @@ if __name__ == '__main__':
         "TRAIN_PART":  0.7,
         "SCHEDULER": "poly",
         "DEBUG":  False,
-        "DATASET": "SWED_FULL",
+        "DATASET": "SWED",
         "LOSS": 'Dice+Crossentropy',
         "METRICS": 'BATCH',
         "OPTIMIZER": "Adam",
         "MOMENTUM": 0.9,
         "WEIGHT_DECAY": 1e-4,
-        "NOTE": 'softmax in loss no weight init encoder_channels=[4,32,64,128,256], base_c = 32',
+        "NOTE": 'Experimental MUNet with skip connections in encoder',
         "PRECISION": 32,
         "NDWI": True,
         },

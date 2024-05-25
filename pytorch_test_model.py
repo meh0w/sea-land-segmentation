@@ -1,6 +1,7 @@
 import torch
 import matplotlib.pyplot as plt
 from pytorch_MU_NET import MUNet as MU_Net
+import pytorch_MU_NET_skip_concat as experimental
 from pytorch_metrics import All_metrics
 from pytorch_generator import DataLoaderSNOWED, DataLoaderSWED, DataLoaderSWED_NDWI
 import os
@@ -34,6 +35,12 @@ def test(data_path, weights_path, data_loader, dataset, m, display, save, result
                 data_eval.append({'idx':i, 'iou':metrics_test['[TEST] IoU mean'][i]})
             data_eval = sorted(data_eval, key=lambda x: x['iou'])
             *_, last1, last2,last3 = data_eval
+            if save:
+                metrics = test_metrics.get(True)
+                with open(rf'{result_path}.txt', 'w') as f:
+                    for key, value in metrics.items():
+                        print(f'{key}: {np.round(value, 4):.4f} \n')
+                        f.write(f'{key}: {np.round(value, 4):.4f} \n')
             print('a')
 
     number_of_rows = min(6, len(val_epoch_progress))
@@ -92,11 +99,11 @@ def test(data_path, weights_path, data_loader, dataset, m, display, save, result
         if j == number_of_rows:
             # plt.subplots_adjust(0.021, 0.012, 0.376, 0.998, 0, 0.067)
             plt.subplots_adjust(0, 0, 1, 1, 0, 0)
-            if display:
-                plt.show()
             if save:
                 fig.set_size_inches(2.4,4.75)
                 plt.savefig(f'{result_path}.jpg', dpi=600)
+            if display:
+                plt.show()
             fig, ax = plt.subplots(5, 3)
             j = 0
         print(j)
@@ -116,7 +123,10 @@ def test_one_folder(folder, result_folder=None):
         m = SeNet2.get_model(data_loader_train.input_size, BATCH_SIZE)
     elif 'MU_Net' in folder:
         # m = MU_Net([32,64,128,256], base_c=32, bilinear=False)
-        m = MU_Net([4,64,128,256,512])
+        # m = MU_Net([4,64,128,256,512])
+        # m = MU_Net([4, 32,64,128,256], base_c=32)
+        # m = MU_Net()
+        m = experimental.MUNet(encoder_channels=[4,8,16,32,64], base_c = 16)
         m.to(device)
         m.load_state_dict(torch.load(weights))
         print(f'Total params: {sum(p.numel() for p in m.parameters())}')
@@ -152,10 +162,16 @@ def test_one_folder(folder, result_folder=None):
 
 
 if __name__ == '__main__':
-    base = rf'weights\MU_Net\REPORT 09-03-2024'
-    res = rf'plots\pytorch_test2'
+    base = rf'weights\MU_Net\REPORT 20-04-2024'
+    res = rf'plots\REPORT 20-04-2024'
     os.makedirs(res, exist_ok=True)
-    folder = rf'weights\MU_Net\2024-04-14 20_18_09 Dice+Crossentropy SWED_FULL 1e-03 sample'
+    
+    # folder = rf'weights\MU_Net\2024-04-12 01_00_48 Dice+Crossentropy SWED_FULL 1e-03 sample' #1)?
+    # folder = rf'weights\MU_Net\2024-04-14 20_18_09 Dice+Crossentropy SWED_FULL 1e-03 sample' #2)?
+    # folder = rf'weights\MU_Net\2024-04-16 02_28_26 Dice+Crossentropy SWED_FULL 1e-03 sample' #3)?
+    # folder = rf'weights\MU_Net\2024-04-16 12_50_21 Dice+Crossentropy SWED_FULL 1e-03 sample' #4)?
+    folder = rf'weights\MU_Net\2024-05-25 13_45_24 Dice+Crossentropy SWED 1e-03 sample'
+
     test_one_folder(folder, res)
     # for folder in os.listdir(base):
     #     test_one_folder(rf'{base}\{folder}', res)
