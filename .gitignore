@@ -1,0 +1,12 @@
+*.tiff
+*.npy
+/sample
+/SWED
+*.pyc
+/wandb
+/weights
+*.zip
+/SNOWED
+/articles
+/plots
+*.pkl
