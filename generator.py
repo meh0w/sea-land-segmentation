@@ -21,7 +21,7 @@ class DataLoaderSWED(keras.utils.Sequence):
 
 
     def __len__(self) :
-        return (np.ceil(len(self.image_filenames) / float(self.batch_size))).astype(int)
+        return (np.floor(len(self.image_filenames) / float(self.batch_size))).astype(int)
 
 
     def __getitem__(self, idx) :
@@ -38,6 +38,7 @@ class DataLoaderSWED(keras.utils.Sequence):
             for img_file, label_file in zip(batch_x, batch_y):
                 images.append(np.moveaxis(tifffile.imread(img_file), 0, -1)[:,:,1:4].astype(np.float32)/22_000) #24_000
                 # images.append(np.moveaxis(tifffile.imread(img_file), 0, -1)[:,:,3:0:-1].astype(np.float32) / (10000*2.5277))
+                # images.append(np.moveaxis(tifffile.imread(img_file), 0, -1)[:,:,1:4].astype(np.float32) / (10000*2.5277))
                 labels.append(np.moveaxis(to_sparse(tifffile.imread(label_file)),0,-1).astype(np.float32))
 
         if self.input_in_labels:
@@ -48,9 +49,9 @@ class DataLoaderSWED(keras.utils.Sequence):
             return np.asarray(images), np.asarray(labels)
     def get_all_labels(self):
         if self.numpy:
-            return np.asarray([np.moveaxis(to_sparse(np.load(label)[0]),0,-1).astype(np.float32) for label in self.labels])
+            return np.asarray([np.moveaxis(to_sparse(np.load(label)[0]),0,-1).astype(np.float32) for label in self.labels[:self.__len__()*self.batch_size]])
         else:
-            return np.asarray([np.moveaxis(to_sparse(tifffile.imread(label)),0,-1).astype(np.float32) for label in self.labels])
+            return np.asarray([np.moveaxis(to_sparse(tifffile.imread(label)),0,-1).astype(np.float32) for label in self.labels[:self.__len__()*self.batch_size]])
         
 class DataLoaderSNOWED(keras.utils.Sequence):
 
@@ -65,7 +66,7 @@ class DataLoaderSNOWED(keras.utils.Sequence):
 
 
     def __len__(self) :
-        return (np.ceil(len(self.folder_names) / float(self.batch_size))).astype(int)
+        return (np.floor(len(self.folder_names) / float(self.batch_size))).astype(int)
 
 
     def __getitem__(self, idx) :
@@ -88,4 +89,4 @@ class DataLoaderSNOWED(keras.utils.Sequence):
 
         
     def get_all_labels(self):
-        return np.asarray([np.moveaxis(to_sparse(np.load(f'{self.root_path}/{folder_name}/label.npy')),0,-1) for folder_name in self.folder_names]).astype(np.float32)
+        return np.asarray([np.moveaxis(to_sparse(np.load(f'{self.root_path}/{folder_name}/label.npy')),0,-1) for folder_name in self.folder_names[:self.__len__()*self.batch_size]]).astype(np.float32)
