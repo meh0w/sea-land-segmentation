@@ -58,14 +58,30 @@ class DataLoaderSWED_NDWI(DataLoaderSWED):
   
 class DataLoaderSWED_NDWI_np(DataLoaderSWED):
     def __init__(self, image_filenames, labels, input_in_labels=False, precision=32):
+        idx = []
+        # percentiles = [[],[],[],[]]
+        for i, lab in enumerate(labels):         
+            if sorted(np.unique(np.load(lab)[0])) == [0,1] or sorted(np.unique(np.load(lab)[0])) == [0] or sorted(np.unique(np.load(lab)[0])) == [1]:
+                continue
+            else:
+                idx.append(i)      
+                # percentiles[0].append(np.percentile((np.load(image_filenames[i])[:,:,3]).reshape(-1), 90)) 
+                # percentiles[1].append(np.percentile((np.load(image_filenames[i])[:,:,2]).reshape(-1), 90)) 
+                # percentiles[2].append(np.percentile((np.load(image_filenames[i])[:,:,1]).reshape(-1), 90)) 
+                # percentiles[3].append(np.percentile((np.load(image_filenames[i])[:,:,7]).reshape(-1), 90))
+        image_filenames = np.delete(image_filenames, idx)
+        labels = np.delete(labels, idx)
         super().__init__(image_filenames, labels, input_in_labels=input_in_labels, precision=precision)
 
     def transform(self, im):
         im[3,:,:] = (im[1,:,:] - im[3,:,:] + 1e-9) / (im[1,:,:] + im[3,:,:] + 1e-9)
         return im
     def __getitem__(self, idx):
-        image = torch.from_numpy(self.transform(np.moveaxis(np.load(self.image_filenames[idx]), 2, 0)[[3,2,1,7],:,:]/22_000)).to(self.precision)
-        label = torch.from_numpy(to_sparse(np.load(self.labels[idx])[0])).to(self.precision)
+        # image = torch.from_numpy(self.transform(np.moveaxis(np.load(self.image_filenames[idx]), 2, 0)[[3,2,1,7],:,:]/22_000)).to(self.precision)
+        image = self.transform((torch.clamp(torch.from_numpy(np.load(self.image_filenames[idx])[:,:,[3,2,1,7]]).to(self.precision)/22_000,min=0,max=1)).permute((2,0,1)))
+
+        # label = torch.from_numpy(to_sparse(np.load(self.labels[idx])[0])).to(self.precision)
+        label = torch.nn.functional.one_hot(torch.from_numpy(np.load(self.labels[idx])[0]).to(torch.int64), 2).permute((2,0,1)).to(self.precision)
 
         return image, label
 
