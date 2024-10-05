@@ -1,6 +1,7 @@
-from tensorflow.keras.layers import GlobalAveragePooling2D, DepthwiseConv2D, Permute, Conv2D, MaxPooling2D, Dense, Flatten, Dropout, BatchNormalization, PReLU, Input, concatenate, UpSampling2D, ReLU, Softmax, BatchNormalization, LayerNormalization
-from tensorflow.keras import Sequential, optimizers, Model, initializers, activations
-from tensorflow import unstack, random, name_scope, concat, transpose, sqrt, zeros, range, stack, meshgrid, reduce_sum, reshape, gather, expand_dims
+from keras.layers import GlobalAveragePooling2D, DepthwiseConv2D, Permute, Conv2D, MaxPooling2D, Dense, Flatten, Dropout, BatchNormalization, PReLU, Input, concatenate, UpSampling2D, ReLU, Softmax, BatchNormalization, LayerNormalization
+from keras import Sequential, optimizers, Model, initializers, activations
+from keras.ops import unstack, transpose, sqrt, zeros, stack, meshgrid, reshape, expand_dims, concatenate
+from tensorflow import random, name_scope, concat, reduce_sum, gather, range
 
 def conv_block(x_in, filters):
     conv = Conv2D(filters, 3, strides=(1,1), padding='same')(x_in)
@@ -19,20 +20,20 @@ def window_partition2(x_in, win_size=(8, 8)):
 
     B, C, H, W = x_in.shape
     x_in = reshape(x_in, (B, C, H // win_size[0], win_size[0],W // win_size[1], win_size[1]))
-    windows = reshape(transpose(x_in, perm=[0, 2, 4, 3, 5, 1]), (-1, win_size[0] * win_size[1], C))
+    windows = reshape(transpose(x_in, axes=[0, 2, 4, 3, 5, 1]), (-1, win_size[0] * win_size[1], C))
     return windows
 
 def window_reverse(x_in, win_size, H=64, W=64, C=512):
     B = int(x_in.shape[0] / (H * W / win_size / win_size))
 
     x_in = reshape(x_in, (B, H // win_size, W // win_size, win_size, win_size, -1))
-    x_out = reshape(transpose(x_in, perm=[0, 1, 3, 2, 4, 5]), (B, H, W, -1))
+    x_out = reshape(transpose(x_in, axes=[0, 1, 3, 2, 4, 5]), (B, H, W, -1))
 
     return x_out
 
 def window_reverse2(x_in, win_size=(8, 8), H=64, W=64, C=512):
     x_in = reshape(x_in, (-1, H // win_size[0], W // win_size[1],win_size[0], win_size[1], C))
-    x_out = reshape(transpose(x_in, perm=[0, 5, 1, 3, 2, 4]), (-1, C, H, W))
+    x_out = reshape(transpose(x_in, axes=[0, 5, 1, 3, 2, 4]), (-1, C, H, W))
     return x_out
 
 def get_bias(win_size=(8,8), num_heads=8):
@@ -42,7 +43,7 @@ def get_bias(win_size=(8,8), num_heads=8):
     coords = stack(meshgrid(coords_h, coords_w, indexing='ij'))
     coords_flatten = Flatten()(coords)
     relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
-    relative_coords = transpose(relative_coords, perm=[1,2,0])
+    relative_coords = transpose(relative_coords, axes=[1,2,0])
     a = relative_coords[:, :, 0]
     b = relative_coords[:, :, 1]
     a += win_size[0] - 1
@@ -53,7 +54,7 @@ def get_bias(win_size=(8,8), num_heads=8):
     initializer = initializers.TruncatedNormal(stddev=0.02)
     values = initializer(((2 * win_size[0] - 1) * (2 * win_size[1] - 1), num_heads))
 
-    bias = transpose(reshape(gather(values, reshape(relative_position_index, -1)), (win_size[0] * win_size[1], win_size[0] * win_size[1], -1)), perm=[2,0,1]) 
+    bias = transpose(reshape(gather(values, reshape(relative_position_index, -1)), (win_size[0] * win_size[1], win_size[0] * win_size[1], -1)), axes=[2,0,1]) 
     
     return expand_dims(bias, axis=0)
 
@@ -90,18 +91,18 @@ def MIX(x_in, bias):
     #
 
     x_cnn = window_reverse2(lnorm2, H=x_in.shape[1], W=x_in.shape[2], C=proj_cnn.shape[-1])
-    dwconv3x3 = dw_conv_block(transpose(x_cnn, perm=[0, 2, 3, 1]))
+    dwconv3x3 = dw_conv_block(transpose(x_cnn, axes=[0, 2, 3, 1]))
     c_interact = channel_interaction(GlobalAveragePooling2D(keepdims=True)(dwconv3x3))
     c_interact = Conv2D(windows.shape[-1] // 2, (1,1))(c_interact)
 
     expanded = Dense(lnorm1.shape[-1]*3)(lnorm1)
     
     B, N, C = lnorm1.shape
-    qkv = transpose(reshape(expanded,(B, N, 3, num_heads, C//num_heads)),perm=[2, 0, 3, 1, 4])
+    qkv = transpose(reshape(expanded,(B, N, 3, num_heads, C//num_heads)),axes=[2, 0, 3, 1, 4])
     q, k, v = qkv[0], qkv[1], qkv[2]
 
     x_cnn2v = activations.sigmoid(c_interact)
-    x_cnn2v = reshape(transpose(x_cnn2v, perm=[0,3,1,2]), (-1, 1, num_heads, 1, C//num_heads))
+    x_cnn2v = reshape(transpose(x_cnn2v, axes=[0,3,1,2]), (-1, 1, num_heads, 1, C//num_heads))
     v = reshape(v, (x_cnn2v.shape[0], -1, num_heads, N, C // num_heads))
     v = v*x_cnn2v
     v = reshape(v, (-1, num_heads, N, C//num_heads))
@@ -118,24 +119,24 @@ def MIX(x_in, bias):
     # attn = Dropout()(attn)
 
     x_atten = reshape(transpose((attn @ v), (0, 2, 1, 3)), (B, N, C))
-    x_spatial = transpose(window_reverse2(x_atten, H=x_in.shape[1], W=x_in.shape[2], C=C), perm=[0,2,3,1])
+    x_spatial = transpose(window_reverse2(x_atten, H=x_in.shape[1], W=x_in.shape[2], C=C), axes=[0,2,3,1])
     s_interact = spatial_interaction(x_spatial)
-    x_cnn = activations.sigmoid(s_interact) * transpose(x_cnn, perm=[0,2,3,1])
+    x_cnn = activations.sigmoid(s_interact) * transpose(x_cnn, axes=[0,2,3,1])
     x_cnn = BatchNormalization()(x_cnn)
-    x_cnn = window_partition2(transpose(x_cnn, perm=[0,3,1,2]))
+    x_cnn = window_partition2(transpose(x_cnn, axes=[0,3,1,2]))
 
     x_atten = LayerNormalization()(x_atten)
-    x = concat([x_atten, x_cnn], -1)
+    x = concatenate([x_atten, x_cnn], -1)
     x = Dense(x_in.shape[-1])(x)
 
     return x
 ##############################################
 
 def MLP(x_in):
-    dense1 = Dense(512*4)(x_in)
+    dense1 = Dense(256*4)(x_in)
     relu1 = ReLU()(dense1)
     drop1 = Dropout(0.)(relu1)
-    dense2 = Dense(512)(drop1)
+    dense2 = Dense(256)(drop1)
     drop2 = Dropout(0.)(dense2)
 
     return drop2
@@ -162,7 +163,7 @@ def down_conv_block(x_in, filters):
 def up_conv_block(x_in, skip, filters):
     ups = UpSampling2D(size=(2,2))(x_in)
     conv = conv_block(ups, filters)
-    x_out = concat([conv, skip], -1)
+    x_out = concatenate([conv, skip], -1)
     return x_out
 
 def AMM(x_in, dim):
@@ -192,8 +193,8 @@ def down_mix_former(x_in):
 def up_mix_former(x_in, skip, bias1, bias2):
 
     up = UpSampling2D(size=(2,2))(x_in)
-    cat = concat([up, skip], -1)
-    conv1 = conv_block(cat, 512)
+    cat = concatenate([up, skip], -1)
+    conv1 = conv_block(cat, 256)
     mixf = mix_former(conv1,bias1)
     x_out = mix_former(mixf, bias2)
 
@@ -207,33 +208,34 @@ def get_model(input_size, bias_size, batch_size=16, format='channels_last'):
 
     nn_in = Input(shape=input_size, batch_size=batch_size)
     biases = Input(shape=bias_size[1:], batch_size=bias_size[0])
-    bias1, bias2, bias3, bias4, bias5, bias6 = unstack(biases)
-    down_conv1a = conv_block(nn_in, 64)
-    down_conv1b = conv_block(down_conv1a, 64)
-    down_conv2 = down_conv_block(down_conv1b, 128)
-    down_conv3 = down_conv_block(down_conv2, 256)
+    # biases = Input(shape=bias_size)
+    bias1, bias2, bias3, bias4, bias5, bias6 = unstack(biases, axis=0)
+    x = conv_block(nn_in, 32)
+    down_conv1b = conv_block(x, 32)
+    down_conv2 = down_conv_block(down_conv1b, 64)
+    down_conv3 = down_conv_block(down_conv2, 128)
 
-    maxp1 = MaxPooling2D((2,2))(down_conv3)
-    down_conv4 = conv_block(maxp1, 512)
-    down_mformer1a = mix_former(down_conv4, bias1)
-    down_mformer1b = mix_former(down_mformer1a, bias2)
+    x = MaxPooling2D((2,2))(down_conv3)
+    x = conv_block(x, 256)
+    x = mix_former(x, bias1)
+    down_mformer1b = mix_former(x, bias2)
 
-    maxp2 = MaxPooling2D((2,2))(down_mformer1b)
-    down_conv5 = conv_block(maxp2, 512)
-    down_mformer2a = mix_former(down_conv5, bias3)
-    down_mformer2b = mix_former(down_mformer2a, bias4)
+    x = MaxPooling2D((2,2))(down_mformer1b)
+    x = conv_block(x, 256)
+    x = mix_former(x, bias3)
+    x = mix_former(x, bias4)
 
-    amm1 = AMM(down_conv2, 128)
-    amm2 = AMM(down_conv3, 256)
-    amm3 = AMM(down_mformer1b, 512)
+    amm1 = AMM(down_conv2, 64)
+    amm2 = AMM(down_conv3, 128)
+    amm3 = AMM(down_mformer1b, 256)
 
-    up_mix = up_mix_former(down_mformer2b, amm3, bias5, bias6)
+    up_mix = up_mix_former(x, amm3, bias5, bias6)
 
-    up_conv1 = up_conv_block(up_mix, amm2, 256)
-    up_conv2 = up_conv_block(up_conv1, amm1, 128)
-    up_conv3 = up_conv_block(up_conv2, down_conv1b, 64)
+    x = up_conv_block(up_mix, amm2, 128)
+    x = up_conv_block(x, amm1, 64)
+    x = up_conv_block(x, down_conv1b, 32)
 
-    out = Conv2D(2, (1,1), padding='valid', data_format=format)(up_conv3)
+    out = Conv2D(2, (1,1), padding='valid', data_format=format)(x)
     out = Softmax(axis=-1)(out)
 
     model = Model(inputs=[nn_in, biases], outputs=out, name="MU_Net")

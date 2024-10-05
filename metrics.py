@@ -131,6 +131,47 @@ def jaccard(pred, real):
 
     return jacc
 
+class ConfusionMatrix():
+    def __init__(self, prefix="", smooth=1e-9):
+        self.TP = 0
+        self.TN = 0
+        self.FN = 0
+        self.FP = 0
+        self.smooth = smooth
+
+    def calc(self, pred, real):
+        if len(pred.shape) == 2:
+            pred = pred.reshape(1, pred.shape[0], pred.shape[1])
+            real = real.reshape(1, real.shape[0], real.shape[1])
+
+        intersect = np.where(pred==real, pred, 2) #if interesction inserts the predicted element else 2
+        exclusion = np.where(pred!=real, pred, 2)
+
+        intersect_land = np.count_nonzero(intersect==LAND, axis=(1,2))          #TN
+        intersect_water = np.count_nonzero(intersect==WATER, axis=(1,2))        #TP
+
+        union_land = np.count_nonzero(pred==LAND, axis=(1,2)) + np.count_nonzero(real==LAND, axis=(1,2)) - intersect_land
+        union_water = np.count_nonzero(pred==WATER, axis=(1,2)) + np.count_nonzero(real==WATER, axis=(1,2)) - intersect_water
+
+        exclusion_land = np.count_nonzero(exclusion==LAND, axis=(1,2))          #FN
+        exclusion_water = np.count_nonzero(exclusion==WATER, axis=(1,2))        #FP
+        self.add_to_confusion_matrix(intersect_land,intersect_water,exclusion_land,exclusion_water)
+
+    def add_to_confusion_matrix(self, TN, TP, FN, FP):
+        self.TP += TP
+        self.TN += TN
+        self.FN += FN
+        self.FP += FP
+
+    def get_IoU_new(self):
+        # WATER = POSITIVE
+        # LAND = NEGATIVE
+        IoU_water = (self.TP + self.smooth) / (self.TP + self.FP + self.FN + self.smooth)
+        IoU_land = (self.TN + self.smooth) / (self.TN + self.FN + self.FP + self.smooth)
+        IoU_mean = (IoU_water+IoU_land)/2
+        return IoU_land, IoU_water, IoU_mean
+        
+
 def all_metrics(pred, real, prefix="", smooth=1e-9):
 
     # WATER = POSITIVE

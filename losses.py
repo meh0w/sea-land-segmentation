@@ -98,4 +98,15 @@ class Weighted_Dice(tf.keras.losses.Loss):
 
         W = tf.math.sqrt(Gx_true**2 + Gy_true**2)
         return tf.reduce_mean(1 - ((2*tf.reduce_sum(y_true*W*y_pred, axis=(1,2,3))+epsilon)/(tf.reduce_sum(y_true+W*y_pred, axis=(1,2,3))+epsilon)))
-   
+  
+class CEDice(tf.keras.losses.Loss):
+    def __init__(self):
+       super().__init__()
+       self.ce = tf.keras.losses.CategoricalCrossentropy()
+    @tf.function
+    def call(self, y_true, y_pred):
+      epsilon = 1e-9
+      dice=tf.reduce_mean(1 - ((2*tf.reduce_sum(y_true*y_pred, axis=(1,2,3))+epsilon)/(tf.reduce_sum(y_true+y_pred, axis=(1,2,3))+epsilon)))
+      ce = self.ce(y_true, y_pred)
+
+      return ce + 0.7*dice

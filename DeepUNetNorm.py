@@ -1,4 +1,4 @@
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Dropout, BatchNormalization, PReLU, Input, concatenate, UpSampling2D, ReLU, Softmax
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Dropout, BatchNormalization, PReLU, Input, concatenate, UpSampling2D, ReLU, Softmax, BatchNormalization
 from tensorflow.keras import Sequential, optimizers, Model
 from tensorflow import name_scope, concat
 
@@ -31,7 +31,7 @@ def up_block(inputs, plus_in, format='channels_last'):
 
     up_sampled = UpSampling2D(size=(2,2), data_format=format)(inputs)
     x = bn_relu(up_sampled)
-    x = concatenate([x, plus_in], -1)
+    x = concat([x, plus_in], -1)
     x = Conv2D(64, (3, 3), strides=(1, 1), padding='same', data_format=format)(x)
     x = bn_relu(x)
     x = Conv2D(32, (3, 3), strides=(1, 1), padding='same', data_format=format)(x)
@@ -53,7 +53,8 @@ def get_model(input_size, batch_size, format='channels_last'):
     nn_in = Input(shape=input_size)
 
     ######## DOWN 1 ##########
-    x = Conv2D(32, 3, padding='same', data_format=format)(nn_in)
+    x = BatchNormalization()(nn_in)
+    x = Conv2D(32, 3, padding='same', data_format=format)(x)
     down_plus1, down1 = down_block(x)
 
     down_plus2, down2 = down_block(down1)

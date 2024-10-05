@@ -4,9 +4,8 @@ import numpy as np
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 import torch.nn as nn
 
-"""
-Code acquired from https://github.com/Kakakakakakah/MU-Net/blob/main/MU-Net.py
-"""
+
+
 
 up_kwargs = {'mode': 'bilinear', 'align_corners': False}
 
@@ -566,9 +565,8 @@ class Down(nn.Module):
         self.doubleconv=DoubleConv(in_channels, out_channels)
     def forward(self, x):
         x=self.maxpool(x)
-        inp = x.clone()
         x=self.doubleconv(x)
-        return torch.cat([x, inp], dim=1)
+        return x
 
 
 class DownsampleConv(nn.Module):
@@ -578,9 +576,8 @@ class DownsampleConv(nn.Module):
         self.conv=ConvBNReLU(in_channels, out_channels,kernel_size=3)
     def forward(self, x):
         x=self.maxpool(x)
-        inp = x.clone()
         x=self.conv(x)
-        return torch.cat([x, inp], dim=1)
+        return x
 
 
 
@@ -589,15 +586,10 @@ class Up(nn.Module):
         super().__init__()
         # if bilinear, use the normal convolutions to reduce the number of channels
         if bilinear:
-            # self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear')
+            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
             self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
-        else:
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear')
-            self.conv = DoubleConv(in_channels, out_channels, in_channels)
 
     def forward(self, x1, x2):
-        # inp = self.up(x1.clone())
         x1 = self.up(x1)
         x = torch.cat([x2, x1], dim=1)
         return self.conv(x)
@@ -607,11 +599,7 @@ class UpsampleConv(nn.Module):
         super().__init__()
         # if bilinear, use the normal convolutions to reduce the number of channels
         if bilinear:
-            # self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear')
-            self.conv =ConvBNReLU(in_channels, out_channels,kernel_size=3)
-        else:
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear')
+            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
             self.conv =ConvBNReLU(in_channels, out_channels,kernel_size=3)
 
     def forward(self, x1, x2):
@@ -621,20 +609,19 @@ class UpsampleConv(nn.Module):
 
 
 class encoder(nn.Module):
-    def __init__(self, n_channels=3, encoder_channels=[3,64,128,256,512]):
+    def __init__(self, n_channels=3):
         super(encoder, self).__init__()
-        self.inc = DoubleConv(encoder_channels[0], encoder_channels[1])
-        self.down1 = Down(sum(encoder_channels[:2]), encoder_channels[2])
-        self.down2 = Down(sum(encoder_channels[:3]), encoder_channels[3])
-        self.down3 = DownsampleConv(sum(encoder_channels[:4]), encoder_channels[4])
-        self.down4 = DownsampleConv(sum(encoder_channels[:5]), encoder_channels[4])
+        self.inc = DoubleConv(n_channels, 64)
+        self.down1 = Down(64, 128)
+        self.down2 = Down(128, 256)
+        self.down3 = DownsampleConv(256, 512)
+        self.down4 = DownsampleConv(512, 1024 // 2)
 
-        self.e4 = BasicLayer(dim=sum(encoder_channels[:5]), depth=2, num_heads=2)
-        self.e5 = BasicLayer(dim=sum(encoder_channels[:5])+encoder_channels[4], depth=2, num_heads=2)
+        self.e4 = BasicLayer(dim=512, depth=2)
+        self.e5 = BasicLayer(dim=512, depth=2)
     def forward(self, x):
         outs = []
         x1 = self.inc(x)
-        x1 = torch.cat([x1, x], dim=1)
         outs.append(x1)
 
         x2 = self.down1(x1)  # 1/2
@@ -654,21 +641,20 @@ class encoder(nn.Module):
 
 
 class decoder(nn.Module):
-    def __init__(self, encoder_channels=[3,64,128,256,512],bilinear=True,base_c: int = 64):
+    def __init__(self, encoder_channels=[64,128,256,512],bilinear=True,base_c: int = 64):
         super(decoder, self).__init__()
-        
+        self.d1 = BasicLayer(dim=encoder_channels[2], depth=2)
         factor = 2 if bilinear else 1
-        self.d1 = BasicLayer(dim=encoder_channels[4], depth=2, num_heads=2)
-        self.up1 = UpsampleConv(2*sum(encoder_channels[:5])+encoder_channels[4], encoder_channels[4], bilinear)
-        self.up2 = Up(sum(encoder_channels[:4])+encoder_channels[4], encoder_channels[3], bilinear)
-        self.up3 = Up(sum(encoder_channels[:3])+encoder_channels[3], encoder_channels[2], bilinear)
-        self.up4 = Up(sum(encoder_channels[:2])+encoder_channels[2], encoder_channels[1], bilinear)
+        self.up1 = UpsampleConv(base_c * 16, base_c * 8 // factor, bilinear)
+        self.up2 = Up(base_c * 8, base_c * 4 // factor, bilinear)
+        self.up3 = Up(base_c * 4, base_c * 2 // factor, bilinear)
+        self.up4 = Up(base_c * 2, base_c, bilinear)
 
-        self.segmentation_head = nn.Conv2d(encoder_channels[1], 2, kernel_size=1)
+        self.segmentation_head = nn.Conv2d(base_c, 2, kernel_size=1)
 
-        self.attn1 = AMM(dim=sum(encoder_channels[:3]))  # C2  128
-        self.attn2 = AMM(dim=sum(encoder_channels[:4]))  # C3  256
-        self.attn3 = AMM(dim=sum(encoder_channels[:5]))  # C4  512
+        self.attn1 = AMM(dim=128)  # C2  128
+        self.attn2 = AMM(dim=256)  # C3  256
+        self.attn3 = AMM(dim=512)  # C4  512
     def forward(self,x,h,w):
         c1,c2,c3,c4,c5=x[:5]
         B, _, H, W = c5.shape
@@ -685,11 +671,11 @@ class decoder(nn.Module):
 
 
 class MUNet(nn.Module):
-    def __init__(self, encoder_channels=[3,64,128,256,512], base_c=64, bilinear=True):
+    def __init__(self, encoder_channels=[64,128,256,512]):
         super(MUNet, self).__init__()
-        self.cnn_encoder=encoder(encoder_channels=encoder_channels)
-        self.trans_decoder=decoder(encoder_channels=encoder_channels, base_c=base_c, bilinear=bilinear)
-        # self.init_weight()
+        self.cnn_encoder=encoder(4)
+        self.trans_decoder=decoder(encoder_channels=encoder_channels)
+        self.init_weight()
     def forward(self,x):
         h, w = x.size()[-2:]
         outs=self.cnn_encoder(x)
@@ -711,3 +697,21 @@ class MUNet(nn.Module):
                 nn.init.constant_(m.bias, 0.)
 
 
+if __name__ == '__main__':
+    from fasterai.misc.bn_folding import BN_Folder
+    m = MUNet()
+    total_params = sum(p.numel() for p in m.parameters())
+    trainable_params = sum(p.numel() for p in m.parameters() if p.requires_grad)
+
+    # torch.save(m, r'C:\Users\Michal\Documents\INF\MAG\plots\OSIOSN\MUNetOG.pt')
+    print(f"{total_params=} \n {trainable_params=}")
+    bn = BN_Folder()
+    m.eval()
+    n_m = bn.fold(m)
+    total_params = sum(p.numel() for p in n_m.parameters())
+    trainable_params = sum(p.numel() for p in n_m.parameters() if p.requires_grad)
+    print(f"{total_params=} \n {trainable_params=}")
+
+    print(m.state_dict().keys())
+
+    

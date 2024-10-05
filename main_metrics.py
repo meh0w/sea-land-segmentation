@@ -59,7 +59,7 @@ def run(c):
             PATH = rf'.\SNOWED\SNOWED'
         elif DATASET == 'SWED_FULL':
             PATH = rf'.\SWED\train'
-        
+
         class MetricsCallbackBatch(Callback):
             def on_epoch_begin(self, epoch, logs=None):
                 print("a")
@@ -247,7 +247,6 @@ def run(c):
             b5 = MU_Net.get_bias()
             b6 = MU_Net.get_bias()
             biases = stack([b1,b2,b3,b4,b5,b6])
-            print(biases.shape)
             m = MU_Net.get_model(data_loader_train.input_size, biases.shape, batch_size=BATCH_SIZE)
 
         callbacks = []
@@ -369,34 +368,18 @@ if __name__ == '__main__':
     # },
     ###############SWED
     ##OPTIMIZERS
-    # {
-    #     "MODEL": 'MU_Net',
-    #     "EPOCHS":  150,
-    #     "BATCH_SIZE": 10,
-    #     "LEARNING_RATE":  1e-3,
-    #     "TRAIN_PART":  0.7,
-    #     "SCHEDULER": "saturate",
-    #     "DEBUG":  True,
-    #     "DATASET": "SWED_FULL",
-    #     "LOSS": 'Dice+Crossentropy',
-    #     "METRICS": 'BATCH',
-    #     "OPTIMIZER": "SGD",
-    #     "MOMENTUM": 0.9,
-    #     "WEIGHT_DECAY": 1e-4
-    # },
-
     {
         "MODEL": 'MU_Net',
-        "EPOCHS":  3,
+        "EPOCHS":  150,
         "BATCH_SIZE": 10,
         "LEARNING_RATE":  1e-3,
         "TRAIN_PART":  0.7,
         "SCHEDULER": "saturate",
         "DEBUG":  True,
-        "DATASET": "SWED",
+        "DATASET": "SWED_FULL",
         "LOSS": 'Dice+Crossentropy',
         "METRICS": 'BATCH',
-        "OPTIMIZER": "Adam",
+        "OPTIMIZER": "SGD",
         "MOMENTUM": 0.9,
         "WEIGHT_DECAY": 1e-4
     },

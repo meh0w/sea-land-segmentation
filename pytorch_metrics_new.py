@@ -212,14 +212,24 @@ class All_metrics:
         self.smooth = smooth
         self.device = device
         self.prefix = prefix
+        self.TP = 0
+        self.TN = 0
+        self.FN = 0
+        self.FP = 0
+
+    def add_to_confusion_matrix(self, TN, TP, FN, FP):
+        self.TP += TP
+        self.TN += TN
+        self.FN += FN
+        self.FP += FP
 
     def calc(self, pred, real):
         # WATER = POSITIVE
         # LAND = NEGATIVE
 
-        # if len(pred.shape) == 2:
-        #     pred = pred.reshape(1, pred.shape[0], pred.shape[1])
-        #     real = real.reshape(1, real.shape[0], real.shape[1])
+        if len(pred.shape) == 2:
+            pred = pred.reshape(1, pred.shape[0], pred.shape[1])
+            real = real.reshape(1, real.shape[0], real.shape[1])
         
         pred = torch.argmax(pred, dim=1)
         real = torch.argmax(real, dim=1)
@@ -235,6 +245,8 @@ class All_metrics:
 
         exclusion_land = torch.count_nonzero(exclusion==LAND, dim=(1,2))          #FN
         exclusion_water = torch.count_nonzero(exclusion==WATER, dim=(1,2))        #FP
+
+        self.add_to_confusion_matrix(intersect_land,intersect_water,exclusion_land,exclusion_water)
 
         IoU_land = (intersect_land + self.smooth) / (union_land + self.smooth)
         IoU_water = (intersect_water + self.smooth) / (union_water + self.smooth)
@@ -286,9 +298,22 @@ class All_metrics:
         self.kappa = torch.tensor([], dtype=torch.float32, device=self.device)
         self.IoU_water = torch.tensor([], dtype=torch.float32, device=self.device)
         self.IoU_land = torch.tensor([], dtype=torch.float32, device=self.device)
+        self.TP = 0
+        self.TN = 0
+        self.FN = 0
+        self.FP = 0
+
+    def get_IoU_new(self):
+        # WATER = POSITIVE
+        # LAND = NEGATIVE
+        IoU_water = (self.TP + self.smooth) / (self.TP + self.FP + self.FN + self.smooth)
+        IoU_land = (self.TN + self.smooth) / (self.TN + self.FN + self.FP + self.smooth)
+        IoU_mean = (IoU_water+IoU_land)/2
+        return IoU_land, IoU_water, IoU_mean
 
     def get(self, mean=True):
         IoU_mean = torch.mean(torch.stack((self.IoU_land, self.IoU_water)), dim=0)
+        IoU_land_new, IoU_water_new, IoU_mean_new = self.get_IoU_new()
         output = {
             f'{self.prefix} IoU land': self.IoU_land,
             f'{self.prefix} IoU water': self.IoU_water,
@@ -300,10 +325,24 @@ class All_metrics:
             f'{self.prefix} F1-score': self.f1,
             f'{self.prefix} Jaccard Index': self.jacc,
             f'{self.prefix} MCC': self.mcc,
-            f'{self.prefix} Cohens Kappa': self.kappa
+            f'{self.prefix} Cohens Kappa': self.kappa,
         }
 
         if mean:
+            output[f'{self.prefix} IoU land new'] = IoU_land_new
+            output[f'{self.prefix} IoU water new'] = IoU_water_new
+            output[f'{self.prefix} IoU mean new'] = IoU_mean_new
+
+            output[f'{self.prefix} TP'] = self.TP.double()
+            output[f'{self.prefix} TN'] = self.TN.double()
+            output[f'{self.prefix} FN'] = self.FN.double()
+            output[f'{self.prefix} FP'] = self.FP.double()
+
+            # output[f'{self.prefix} TP'] = torch.tensor([self.TP])
+            # output[f'{self.prefix} TN'] = torch.tensor([self.TN])
+            # output[f'{self.prefix} FN'] = torch.tensor([self.FN])
+            # output[f'{self.prefix} FP'] = torch.tensor([self.FP])
+
             return {key: torch.mean(value).item() for key, value in output.items()}
         else:
             return output

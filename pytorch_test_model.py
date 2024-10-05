@@ -1,9 +1,11 @@
 import torch
 import matplotlib.pyplot as plt
+from pytorch_DeepUNet import DeepUNet
+from pytorch_SeNet import SeNet
 from pytorch_MU_NET import MUNet as MU_Net
 import pytorch_MU_NET_quant as experimental
-from pytorch_metrics import All_metrics
-from pytorch_metrics_new import All_metrics2
+# from pytorch_metrics import All_metrics
+from pytorch_metrics_new import All_metrics
 from pytorch_generator import DataLoaderSNOWED, DataLoaderSWED, DataLoaderSWED_NDWI,DataLoaderSWED_NDWI_np, DataLoaderSNOWED_NDWI
 import os
 import pprint
@@ -15,6 +17,7 @@ from tqdm import tqdm
 from time import time
 import torch.nn.utils.prune as prune
 from fasterai.misc.bn_folding import BN_Folder
+import ast
 
 def print_size_of_model(model):
     torch.save(model.state_dict(), "temp.pt")
@@ -71,9 +74,7 @@ def test(data_loader, dataset, m, display, save, result_path, options, device='c
         print('QUANTIZED')
 
 
-
     test_metrics = All_metrics(device, '[TEST]')
-    test_metrics2 = All_metrics2(device, '[TEST]')
     softmax = torch.nn.Softmax(dim=1)
     val_epoch_progress = tqdm(
         data_loader, f"[EVAL] (TEST SET)", leave=False
@@ -97,7 +98,10 @@ def test(data_loader, dataset, m, display, save, result_path, options, device='c
                 start = time()
                 outputs = m(inputs)
                 times.append(time()-start)
-                test_metrics.calc(outputs, labels)
+                if isinstance(outputs, tuple) and len(outputs) == 2:
+                    test_metrics.calc(outputs[0], labels)
+                else:
+                    test_metrics.calc(outputs, labels)
 
             print(f'Czas inferencji: {np.mean(times[1:])}\n {times}')
             test_state_dict = test_metrics.get(False)
@@ -123,7 +127,7 @@ def test(data_loader, dataset, m, display, save, result_path, options, device='c
                     print(f'{key}: {np.round(value, 4):.4f} \n')
             print('a')
 
-    no_predictions = True
+    no_predictions = False
 
     number_of_rows = 4 if no_predictions else min(6, len(val_epoch_progress))
     number_of_cols = 2 if no_predictions else 3
@@ -142,7 +146,11 @@ def test(data_loader, dataset, m, display, save, result_path, options, device='c
         clipped = np.clip(rgb, 0, 0.6)/0.6
         # clipped = rgb
         with torch.no_grad():
-            predicted = softmax(m(dataset[i][0].to(device).unsqueeze(0)))
+            outputs = m(dataset[i][0].to(device).unsqueeze(0))
+            if isinstance(outputs, tuple) and len(outputs):
+                predicted = softmax(outputs[0])
+            else:
+                predicted = softmax(outputs)
 
         if no_predictions:
             ax[j, 0].imshow(clipped)
@@ -210,25 +218,37 @@ def test(data_loader, dataset, m, display, save, result_path, options, device='c
             j = 0
         print(j)
 
-def test_one_folder(folder, opts, result_folder=None):
+def test_one_folder(folder, opts, result_folder=None, config=None):
     BATCH_SIZE = 1
     weights = rf'.\{folder}\BEST.pt'
     device = opts['device']
     if opts['quant']:
         device = 'cpu'
 
+    NDWI = config['NDWI'] if 'NDWI' in config else False
+    SCALE = config['SCALE'] if 'SCALE' in config else 1
+
     if 'DeepUNet' in folder:
-        m = DeepUNet.get_model(data_loader_train.input_size, BATCH_SIZE)
+        channels = 4 if NDWI else 3
+        output_count = config['output_count'] if 'output_count' in config else 1
+        m = DeepUNet(channels, SCALE, outputs=output_count)
+        m.to(device)
+        m.load_state_dict(torch.load(weights))
     elif 'DeepUNet2' in folder:
         m = DeepUNet2.get_model(data_loader_train.input_size, BATCH_SIZE)
     elif 'SeNet' in folder:
-        m = SeNet.get_model(data_loader_train.input_size, BATCH_SIZE)
+        channels = 4 if NDWI else 3
+        output_count = config['output_count'] if 'output_count' in config else 2
+        m = SeNet(channels, SCALE, outputs=output_count)
+        m.to(device)
+        m.load_state_dict(torch.load(weights))
     elif 'SeNet2' in folder:
         m = SeNet2.get_model(data_loader_train.input_size, BATCH_SIZE)
     elif 'MU_Net' in folder:
+        output_count = config['output_count'] if 'output_count' in config else 1
         # m = MU_Net([32,64,128,256], base_c=32, bilinear=False)
-        # m = MU_Net([4,64,128,256,512]) #1st NDWI #OSIOSN1
-        m = MU_Net([4, 32,64,128,256], base_c=32) #OSIOSN2
+        m = MU_Net([4,64,128,256,512]) #1st NDWI #OSIOSN1
+        # m = MU_Net([4, 32,64,128,256], base_c=32) #OSIOSN2
         # m = experimental.MUNet([4, 32,64,128,256], base_c=32)
 
         # m = MU_Net()
@@ -259,7 +279,7 @@ def test_one_folder(folder, opts, result_folder=None):
     loader = DataLoader(data_set_test, batch_size=BATCH_SIZE, shuffle=False)
 
     save = True
-    display = True
+    display = False
     if save and result_folder is None:
         raise Exception('Results folder not specified')
     else:
@@ -271,9 +291,7 @@ def test_one_folder(folder, opts, result_folder=None):
 if __name__ == '__main__':
     base = rf'weights\MU_Net\REPORT 20-04-2024'
 
-    for d in ['cuda']:
-        res = rf'plots\Magisterka\przyklad_dane'
-        os.makedirs(res, exist_ok=True)
+    for d in ['cpu']:
         optimize_options = {
             'quant': False,
             'prune': False,
@@ -286,7 +304,7 @@ if __name__ == '__main__':
     # PRUNE = True
     # BN_FOLD = False
     # folder = rf'weights\MU_Net\2024-04-12 01_00_48 Dice+Crossentropy SWED_FULL 1e-03 sample' #1)?
-    # folder = rf'weights\MU_Net\2024-04-14 20_18_09 Dice+Crossentropy SWED_FULL 1e-03 sample' #2)? #OSIOSN #1
+        # folder = rf'weights\MU_Net\2024-04-14 20_18_09 Dice+Crossentropy SWED_FULL 1e-03 sample' #2)? #OSIOSN #1
     # folder = rf'weights\MU_Net\2024-04-16 02_28_26 Dice+Crossentropy SWED_FULL 1e-03 sample' #3)?
     # folder = rf'weights\MU_Net\2024-04-16 12_50_21 Dice+Crossentropy SWED_FULL 1e-03 sample' #4)?
     # folder = rf'weights\MU_Net\2024-05-25 13_45_24 Dice+Crossentropy SWED 1e-03 sample'
@@ -296,7 +314,7 @@ if __name__ == '__main__':
     # folder = rf'weights\MU_Net\2024-04-14 17_55_05 Dice+Crossentropy SWED 1e-03 sample'
 
     # BEST FULL SWED
-        folder = rf'weights\MU_Net\2024-04-16 02_28_26 Dice+Crossentropy SWED_FULL 1e-03 sample' #OSIOSN #2 smaller
+        # folder = rf'weights\MU_Net\2024-04-16 02_28_26 Dice+Crossentropy SWED_FULL 1e-03 sample' #OSIOSN #2 smaller
 
     # folder = rf'weights\MU_Net\2024-04-12 01_00_48 Dice+Crossentropy SWED_FULL 1e-03 sample' #SGD
 
@@ -312,7 +330,38 @@ if __name__ == '__main__':
 
     #SGD
         # folder = rf'weights\MU_Net\2024-09-10 03_21_11 Dice+Crossentropy SWED_FULL 1e-03 sample'
-
-        test_one_folder(folder, optimize_options, res)
+    #NDWI
+        folders = {
+            # 1: rf'weights\MU_Net\2024-04-12 01_00_48 Dice+Crossentropy SWED_FULL 1e-03 sample',
+            # 2: rf'weights\MU_Net\2024-04-14 20_18_09 Dice+Crossentropy SWED_FULL 1e-03 sample',
+            # 3: rf'weights\MU_Net\2024-04-16 02_28_26 Dice+Crossentropy SWED_FULL 1e-03 sample',
+            # 4: rf'weights\MU_Net\2024-04-16 12_50_21 Dice+Crossentropy SWED_FULL 1e-03 sample'
+        }
+    #1.
+    # folder rf'weights\MU_Net\2024-04-12 01_00_48 Dice+Crossentropy SWED_FULL 1e-03 sample'
+    #2.
+    # folder = rf'weights\MU_Net\2024-04-14 20_18_09 Dice+Crossentropy SWED_FULL 1e-03 sample'
+    #3.
+    # folder = rf'weights\MU_Net\2024-04-16 02_28_26 Dice+Crossentropy SWED_FULL 1e-03 sample'
+    #4.
+    # folder = rf'weights\MU_Net\2024-04-16 12_50_21 Dice+Crossentropy SWED_FULL 1e-03 sample'
+        # 'plots\NEW_IOU\SeNetLossvsDiceCE#{i}'
+        folders = {
+            # 1: rf'weights\SeNet\2024-10-03 22_17_06 SeNetLoss SWED_FULL 1e-03 sample',
+            # 2: rf'weights\SeNet\2024-10-04 09_53_56 SeNetLoss SWED_FULL 1e-03 sample',
+            3: rf'weights\SeNet\2024-10-05 12_38_26 Dice+Crossentropy SWED_FULL 1e-03 sample',
+            4: rf'weights\SeNet\2024-10-05 16_04_39 Dice+Crossentropy SWED_FULL 1e-03 sample',
+            # 5: rf'weights\DeepUNet\2024-10-04 14_44_12 SeNetLoss SWED_FULL 1e-03 sample',
+            # 6: rf'weights\DeepUNet\2024-10-04 18_23_22 SeNetLoss SWED_FULL 1e-03 sample',
+            # 7: rf'weights\DeepUNet\2024-10-05 01_40_26 Dice+Crossentropy SWED_FULL 1e-03 sample',
+            # 8: rf'weights\DeepUNet\2024-10-05 05_28_33 Dice+Crossentropy SWED_FULL 1e-03 sample',
+        
+        }
+        for i, folder in folders.items():
+            res = rf'plots\NEW_IOU\SeNetLossvsDiceCE#{i}'
+            with open(rf'{folder}\config.txt') as f:
+                config = ast.literal_eval(f.read())
+            os.makedirs(res, exist_ok=True)
+            test_one_folder(folder, optimize_options, res, config)
         # for folder in os.listdir(base):
         #     test_one_folder(rf'{base}\{folder}', res)

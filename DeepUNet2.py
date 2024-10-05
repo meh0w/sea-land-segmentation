@@ -31,7 +31,7 @@ def up_block(inputs, plus_in, format='channels_last'):
 
     up_sampled = UpSampling2D(size=(2,2), data_format=format)(inputs)
     x = bn_relu(up_sampled)
-    x = concat([x, plus_in], -1)
+    x = concatenate([x, plus_in], -1)
     x = Conv2D(64, (3, 3), strides=(1, 1), padding='same', data_format=format)(x)
     x = bn_relu(x)
     x = Conv2D(32, (3, 3), strides=(1, 1), padding='same', data_format=format)(x)

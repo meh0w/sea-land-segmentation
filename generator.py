@@ -76,6 +76,8 @@ class DataLoaderSNOWED(keras.utils.Sequence):
         labels = []
         for folder_name in batch:
             images.append(np.moveaxis(np.load(f'{self.root_path}/{folder_name}/sample.npy'), 0, 0)[:,:,3:0:-1].astype(np.float32) / (10000*2.5277)) #24_000
+            # images.append(np.moveaxis(np.load(f'{self.root_path}/{folder_name}/sample.npy'), 0, 0)[:,:,[1,2,3]].astype(np.float32) / (10000*2.5277)) #24_000
+            
             labels.append(np.moveaxis(to_sparse(np.load(f'{self.root_path}/{folder_name}/label.npy')),0,-1).astype(np.float32))
         
         if self.input_in_labels:

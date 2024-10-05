@@ -566,9 +566,8 @@ class Down(nn.Module):
         self.doubleconv=DoubleConv(in_channels, out_channels)
     def forward(self, x):
         x=self.maxpool(x)
-        inp = x.clone()
         x=self.doubleconv(x)
-        return torch.cat([x, inp], dim=1)
+        return x
 
 
 class DownsampleConv(nn.Module):
@@ -578,9 +577,8 @@ class DownsampleConv(nn.Module):
         self.conv=ConvBNReLU(in_channels, out_channels,kernel_size=3)
     def forward(self, x):
         x=self.maxpool(x)
-        inp = x.clone()
         x=self.conv(x)
-        return torch.cat([x, inp], dim=1)
+        return x
 
 
 
@@ -597,7 +595,6 @@ class Up(nn.Module):
             self.conv = DoubleConv(in_channels, out_channels, in_channels)
 
     def forward(self, x1, x2):
-        # inp = self.up(x1.clone())
         x1 = self.up(x1)
         x = torch.cat([x2, x1], dim=1)
         return self.conv(x)
@@ -624,17 +621,16 @@ class encoder(nn.Module):
     def __init__(self, n_channels=3, encoder_channels=[3,64,128,256,512]):
         super(encoder, self).__init__()
         self.inc = DoubleConv(encoder_channels[0], encoder_channels[1])
-        self.down1 = Down(sum(encoder_channels[:2]), encoder_channels[2])
-        self.down2 = Down(sum(encoder_channels[:3]), encoder_channels[3])
-        self.down3 = DownsampleConv(sum(encoder_channels[:4]), encoder_channels[4])
-        self.down4 = DownsampleConv(sum(encoder_channels[:5]), encoder_channels[4])
+        self.down1 = Down(encoder_channels[1], encoder_channels[2])
+        self.down2 = Down(encoder_channels[2], encoder_channels[3])
+        self.down3 = DownsampleConv(encoder_channels[3], encoder_channels[4])
+        self.down4 = DownsampleConv(encoder_channels[4], encoder_channels[4])
 
-        self.e4 = BasicLayer(dim=sum(encoder_channels[:5]), depth=2, num_heads=2)
-        self.e5 = BasicLayer(dim=sum(encoder_channels[:5])+encoder_channels[4], depth=2, num_heads=2)
+        self.e4 = BasicLayer(dim=encoder_channels[4], depth=1, num_heads=2)
+        self.e5 = BasicLayer(dim=encoder_channels[4], depth=1, num_heads=2)
     def forward(self, x):
         outs = []
         x1 = self.inc(x)
-        x1 = torch.cat([x1, x], dim=1)
         outs.append(x1)
 
         x2 = self.down1(x1)  # 1/2
@@ -658,17 +654,17 @@ class decoder(nn.Module):
         super(decoder, self).__init__()
         
         factor = 2 if bilinear else 1
-        self.d1 = BasicLayer(dim=encoder_channels[4], depth=2, num_heads=2)
-        self.up1 = UpsampleConv(2*sum(encoder_channels[:5])+encoder_channels[4], encoder_channels[4], bilinear)
-        self.up2 = Up(sum(encoder_channels[:4])+encoder_channels[4], encoder_channels[3], bilinear)
-        self.up3 = Up(sum(encoder_channels[:3])+encoder_channels[3], encoder_channels[2], bilinear)
-        self.up4 = Up(sum(encoder_channels[:2])+encoder_channels[2], encoder_channels[1], bilinear)
+        self.d1 = BasicLayer(dim=encoder_channels[4], depth=1, num_heads=2)
+        self.up1 = UpsampleConv(encoder_channels[4]*2, encoder_channels[4], bilinear)
+        self.up2 = Up(encoder_channels[4] + encoder_channels[3] , encoder_channels[3], bilinear)
+        self.up3 = Up(encoder_channels[3] + encoder_channels[2], encoder_channels[2], bilinear)
+        self.up4 = Up(encoder_channels[2]+encoder_channels[1], encoder_channels[1], bilinear)
 
         self.segmentation_head = nn.Conv2d(encoder_channels[1], 2, kernel_size=1)
 
-        self.attn1 = AMM(dim=sum(encoder_channels[:3]))  # C2  128
-        self.attn2 = AMM(dim=sum(encoder_channels[:4]))  # C3  256
-        self.attn3 = AMM(dim=sum(encoder_channels[:5]))  # C4  512
+        self.attn1 = AMM(dim=encoder_channels[2])  # C2  128
+        self.attn2 = AMM(dim=encoder_channels[3])  # C3  256
+        self.attn3 = AMM(dim=encoder_channels[4])  # C4  512
     def forward(self,x,h,w):
         c1,c2,c3,c4,c5=x[:5]
         B, _, H, W = c5.shape
