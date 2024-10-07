@@ -14,7 +14,7 @@ import ast
 import numpy as np
 import os
 
-from model_config_window import Model_Config_Window
+from gui.model_config_window import Model_Config_Window
 
 
 class Train_Window(QMainWindow):
@@ -110,11 +110,11 @@ class Train_Window(QMainWindow):
             self.process.readyReadStandardOutput.connect(self.handle_stdout)
             self.process.readyReadStandardError.connect(self.handle_stderr)
             self.process.stateChanged.connect(self.handle_state)
-            # args = ['pytorch_main.py']
-            args = ['train.py']
+            args = ['execute_training.py']
+            # args = ['train.py']
             config = self.config_to_args()
             args.extend(config)
-            self.process.start("python3", args)
+            self.process.start(r"C:\Users\Michal\Documents\pip_venvs\pt\Scripts\python", args)
             self.process.finished.connect(self.training_ended)
 
     def config_to_args(self):
@@ -199,10 +199,15 @@ class Train_Window(QMainWindow):
         self.config['SCHEDULER'] = v
 
     def change_debug(self, v):
-        self.config['DEBUG'] = ast.literal_eval(v) if v != '<Not selected>' else v
+        self.config['DEBUG'] = not ast.literal_eval(v) if v != '<Not selected>' else v
 
     def change_dataset(self, v):
-        self.config['DATASET'] = v
+        if v == 'SWED FULL':
+            self.config['DATASET'] = 'SWED_FULL'
+        elif v == 'SWED sample':
+            self.config['DATASET'] = 'SWED'
+        else:
+            self.config['DATASET'] = v
 
     def change_loss(self, v):
         self.config['LOSS'] = v

@@ -113,7 +113,7 @@ class Model_Config_Window(QMainWindow):
             self.debug_label = QLabel('Use wandb: ')
 
             self.dataset_cbox = QComboBox()
-            self.dataset_cbox.addItems(['<Not selected>', 'SWED sample', 'SWED Full', 'SNOWED'])
+            self.dataset_cbox.addItems(['<Not selected>', 'SWED sample', 'SWED FULL', 'SNOWED'])
             self.dataset_cbox.setCurrentText(self.parent().config['DATASET'])
             self.dataset_cbox.currentTextChanged.connect(self.parent().change_dataset)
             self.dataset_label = QLabel('Dataset: ')

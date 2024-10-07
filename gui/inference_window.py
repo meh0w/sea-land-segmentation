@@ -1,23 +1,28 @@
 from PyQt5.QtGui import QCloseEvent
 from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout, QPushButton, QMainWindow, QFileDialog, QComboBox, QGridLayout
 from matplotlib.figure import Figure
-
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from pytorch_generator import DataLoaderSWED_NDWI
 from torch.utils.data import DataLoader
+import torch
 
 import ast
 import numpy as np
-import os
 
-from model_config_window import Model_Config_Window
+from gui.model_config_window import Model_Config_Window
+from pytorch_DeepUNet import DeepUNet
+from pytorch_SeNet import SeNet
+from pytorch_MU_NET import MUNet as MU_Net
+import os
 
 
 class Inference_Window(QMainWindow):
     def __init__(self, parent):
         super().__init__(parent)
         self.setWindowTitle("Inference")
+
+        self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         self.figure = Figure()
         self.canvas = FigureCanvas(self.figure)
         self.toolbar = NavigationToolbar(self.canvas, self)
@@ -34,18 +39,25 @@ class Inference_Window(QMainWindow):
         self.cfg_file_button = QPushButton('Choose model config file')
         self.cfg_file_button.clicked.connect(self.get_config)
 
+        self.weights_file_button = QPushButton('Choose model weights file')
+        self.weights_file_button.clicked.connect(self.get_weights)
+
         self.cfg_button = QPushButton('Setup config manually')
         self.cfg_button.clicked.connect(self.show_config_window)
 
         self.display_button = QPushButton('Display')
         self.display_button.clicked.connect(self.display_images)
 
+        self.predict_button = QPushButton('Predict')
+        self.predict_button.clicked.connect(self.predict)
+
         self.model = None
 
         self.models = {
-            'SeNet': 'SeNet class',
-            'DeepUNet': 'DeepUNet class',
-            'MU-Net': 'MU-Net class'
+            'SeNet': SeNet,
+            'DeepUNet': DeepUNet,
+            'MU-Net': MU_Net,
+            'MU_Net': MU_Net
         }
 
         self.config = {
@@ -77,6 +89,8 @@ class Inference_Window(QMainWindow):
         options_layout.addWidget(self.cfg_button, 1, 1)
         options.setLayout(options_layout)
         layout.addWidget(options)
+        layout.addWidget(self.weights_file_button)
+        layout.addWidget(self.predict_button)
         layout.addWidget(self.display_button)
 
         wid.setLayout(layout)
@@ -118,14 +132,20 @@ class Inference_Window(QMainWindow):
                 img_axs[i].imshow(clipped)
 
                 if self.model is not None:
-                    #img = img.to(device)
-                    #outputs = self.model(img)
-                    pred_axs[i].imshow(clipped)
+                    with torch.no_grad():
+                        softmax = torch.nn.Softmax(dim=1)
+                        img = img.to(self.device)
+                        outputs = self.model(self.data_set[i][0].to(self.device).unsqueeze(0))
+                        if isinstance(outputs, tuple) and len(outputs):
+                            predicted = softmax(outputs[0])
+                        else:
+                            predicted = softmax(outputs)
+                        pred_axs[i].imshow(np.argmax(predicted.cpu().numpy()[0],axis=0))
 
             label = self.data_set[i][1]
             if label is not None:
-                real = np.moveaxis(label.numpy(), 0, -1)[:,:,[0,1,2]]
-                label_axs[i].imshow(clipped)
+                real = np.moveaxis(label.numpy(), 0, -1)
+                label_axs[i].imshow(np.argmax(real,axis=-1))
             
             self.remove_ticks(img_axs[i])
             self.remove_ticks(pred_axs[i])
@@ -154,9 +174,31 @@ class Inference_Window(QMainWindow):
         self.loader = DataLoader(self.data_set, batch_size=1, shuffle=False)
         self.plot()
 
+    def predict(self):
+        if self.config['MODEL'] == 'SeNet':
+            channels = 4 if self.config['NDWI'] else 3
+            output_count = self.config['output_count'] if 'output_count' in self.config else 2
+            self.model = SeNet(channels, self.config['SCALE'], outputs=output_count)
+            self.model.to(self.device)
+            self.model.load_state_dict(torch.load(self.weights_file))
+        if self.config['MODEL'] == 'DeepUNet':
+            channels = 4 if self.config['NDWI'] else 3
+            output_count = self.config['output_count'] if 'output_count' in self.config else 1
+            self.model = DeepUNet(channels, self.config['SCALE'], outputs=output_count)
+            self.model.to(self.device)
+            self.model.load_state_dict(torch.load(self.weights_file))
+        if self.config['MODEL'] == 'MU-Net' or self.config['MODEL'] == 'MU_Net':
+            encoder_channels = [i // self.config['SCALE'] for i in [4,64,128,256,512]]
+            encoder_channels[0] = 4 if self.config['NDWI'] else 3
+            output_count = self.config['output_count'] if 'output_count' in self.config else 1
+            self.model = MU_Net(encoder_channels=encoder_channels, base_c = 32, outputs=output_count, ablation=self.config['ABLATION'], include_AMM=self.config['INCLUDE_AMM'])
+        
+            self.model.to(self.device)
+            self.model.load_state_dict(torch.load(self.weights_file))
+
     def change_model(self, name):
         if name in self.models:
-            self.model = self.models[name]#()
+            self.config['MODEL'] = name
             if name == 'MU-Net':
                 self.model_config_window.ablation_cbox.setEnabled(True)
                 self.model_config_window.amm_cbox.setEnabled(True)
@@ -180,10 +222,15 @@ class Inference_Window(QMainWindow):
 
             filled = self.validate_config(config)
 
+    def get_weights(self):
+        weights_file = QFileDialog.getOpenFileName(self, 'Open file', 'c:\\',"Weights files (*.pt)")[0]
+        if weights_file.endswith('.pt') and os.path.isfile(weights_file):
+            self.weights_file = weights_file
+
     def validate_config(self, config):
         filled = True
         if type(config) == dict:
-            if config['MODEL'] == self.model_config_window.model_cbox.currentText():
+            if config['MODEL'] in self.models:
                 self.config['MODEL'] = config['MODEL']
 
             if config['PRECISION'] in [16, 32]:
@@ -220,16 +267,16 @@ class Inference_Window(QMainWindow):
         return filled
     
     def change_precision(self, v):
-        self.config['PRECISION'] = v
+        self.config['PRECISION'] = int(v) if v != '<Not selected>' else v
 
     def change_NDWI(self, v):
-        self.config['NDWI'] = v
+        self.config['NDWI'] = ast.literal_eval(v) if v != '<Not selected>' else v
 
     def change_scale(self, v):
-        self.config['SCALE'] = v
+        self.config['SCALE'] = int(v) if v != '<Not selected>' else v
 
     def change_ablation(self, v):
-        self.config['ABLATION'] = v
+        self.config['ABLATION'] = int(v) if v != '<Not selected>' else 0
 
     def change_amm(self, v):
-        self.config['INCLUDE_AMM'] = v
+        self.config['INCLUDE_AMM'] = ast.literal_eval(v) if v != '<Not selected>' else True

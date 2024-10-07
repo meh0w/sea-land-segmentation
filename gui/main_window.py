@@ -2,8 +2,8 @@ from PyQt5.QtGui import QCloseEvent
 from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout, QPushButton, QMainWindow, QFileDialog, QComboBox, QGridLayout
 from matplotlib.figure import Figure
 
-from inference_window import Inference_Window
-from train_window import Train_Window
+from gui.inference_window import Inference_Window
+from gui.train_window import Train_Window
 
 class Window(QMainWindow):
     def __init__(self):
