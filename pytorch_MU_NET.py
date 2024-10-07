@@ -3,6 +3,11 @@ import torch.nn.functional as F
 import numpy as np
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 import torch.nn as nn
+from pytorch_MU_NET_utils import window_partition, window_partition2, window_reverse, window_reverse2
+from pytorch_MU_NET_ablation1 import MixingAttention_AB1
+from pytorch_MU_NET_ablation2 import MixingAttention_AB2
+from pytorch_MU_NET_ablation3 import MixingAttention_AB3
+from pytorch_MU_NET_ablation4 import MixingAttention_AB4
 
 """
 Code acquired from https://github.com/Kakakakakakah/MU-Net/blob/main/MU-Net.py
@@ -117,72 +122,6 @@ class Mlp(nn.Module):
         x = self.fc2(x)
         x = self.drop2(x)
         return x
-
-def window_partition(x, window_size: int):
-    """
-    Args:   x: (B, H, W, C)
-            window_size (int): window size(M)
-    Returns:
-        windows: (num_windows*B, window_size, window_size, C)
-    """
-    B, H, W, C = x.shape
-    x = x.view(B, H // window_size, window_size, W // window_size, window_size, C)
-    # permute: [B, H//Mh, Mh, W//Mw, Mw, C] -> [B, H//Mh, W//Mh, Mw, Mw, C]
-    # view: [B, H//Mh, W//Mw, Mh, Mw, C] -> [B*num_windows, Mh, Mw, C]
-    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
-    return windows
-
-
-def window_reverse(windows, window_size: int, H: int, W: int,C):
-    """
-    Args:
-        windows: (num_windows*B, window_size, window_size, C)
-        window_size (int): Window size(M)
-        H (int): Height of image
-        W (int): Width of image
-    Returns:
-        x: (B, H, W, C)
-    """
-
-    B = int(windows.shape[0] / (H * W / window_size / window_size))
-    # view: [B*num_windows, Mh, Mw, C] -> [B, H//Mh, W//Mw, Mh, Mw, C]
-    x = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
-    # permute: [B, H//Mh, W//Mw, Mh, Mw, C] -> [B, H//Mh, Mh, W//Mw, Mw, C]
-    # view: [B, H//Mh, Mh, W//Mw, Mw, C] -> [B, H, W, C]
-    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
-    return x
-
-
-def window_partition2(x, window_size):
-    """ Split the feature map to windows.
-    B, C, H, W --> B * H // win * W // win x win*win x C
-    Args:
-        x: (B, C, H, W)
-        window_size (tuple[int]): window size
-    Returns:
-        windows: (num_windows*B, window_size * window_size, C)
-    """
-    B, C, H, W = x.shape
-    x = x.view([B, C, H // window_size[0], window_size[0],W // window_size[1], window_size[1]])
-    windows = x.permute([0, 2, 4, 3, 5, 1]).contiguous().view([-1, window_size[0] * window_size[1], C])
-    return windows  # [B*(H/WS)*(W/WS),WS*WS,C]
-
-
-def window_reverse2(windows, window_size, H, W, C):
-    """ Windows reverse to feature map.
-    B * H // win * W // win x win*win x C --> B, C, H, W
-    Args:
-        windows: (num_windows*B, window_size, window_size, C)
-        window_size (tuple[int]): Window size
-        H (int): Height of image
-        W (int): Width of image
-    Returns:
-        x: (B, C, H, W)
-    """
-    x = windows.view([-1, H // window_size[0], W // window_size[1],window_size[0], window_size[1], C])
-    x = x.permute([0, 5, 1, 3, 2, 4]).contiguous().view([-1, C, H, W])
-    return x  # (B, C, H, W)
-
 
 
 class MixingAttention(nn.Module):
@@ -371,7 +310,7 @@ class MixingBlock(nn.Module):
 
     def __init__(self, dim,num_heads,window_size=7,dwconv_kernel_size=3,shift_size=0,
                  mlp_ratio=4.,qkv_bias=True,qk_scale=None,
-                 drop=0.,attn_drop=0.,drop_path=0.,act_layer=nn.GELU,norm_layer=nn.LayerNorm):
+                 drop=0.,attn_drop=0.,drop_path=0.,act_layer=nn.GELU,norm_layer=nn.LayerNorm, ablation=0):
         super().__init__()
         self.dim = dim
         self.num_heads = num_heads
@@ -381,7 +320,16 @@ class MixingBlock(nn.Module):
         assert self.shift_size == 0, "No shift in MixFormer"
 
         self.norm1 = norm_layer(dim)
-        self.attn = MixingAttention(
+
+        ablation_dict = {
+            0: MixingAttention,
+            1: MixingAttention_AB1,
+            2: MixingAttention_AB2,
+            3: MixingAttention_AB3,
+            4: MixingAttention_AB4,
+        }
+
+        self.attn = ablation_dict[ablation](
             dim,window_size=to_2tuple(self.window_size),
             dwconv_kernel_size=dwconv_kernel_size,
             num_heads=num_heads,
@@ -480,7 +428,7 @@ class BasicLayer(nn.Module):
     def __init__(self,dim=512,depth=6,
                  num_heads=8,window_size=8, dwconv_kernel_size=3,mlp_ratio=4.,
                  qkv_bias=True,qk_scale=None, drop=0.02, attn_drop=0.01, drop_path=0.,norm_layer=nn.LayerNorm,
-                 out_dim=0):
+                 out_dim=0, ablation=0):
         super().__init__()
         self.window_size = window_size
         self.depth = depth
@@ -497,7 +445,7 @@ class BasicLayer(nn.Module):
                 drop=drop,
                 attn_drop=attn_drop,
                 drop_path=drop_path[i]  if isinstance(drop_path, (np.ndarray, list)) else drop_path,
-                norm_layer=norm_layer) for i in range(depth)
+                norm_layer=norm_layer, ablation=ablation) for i in range(depth)
         ])
         self.norm = nn.LayerNorm(dim, eps=1e-6)
     def forward(self, x):
@@ -618,7 +566,7 @@ class UpsampleConv(nn.Module):
 
 
 class encoder(nn.Module):
-    def __init__(self, n_channels=3, encoder_channels=[3,64,128,256,512]):
+    def __init__(self, n_channels=3, encoder_channels=[3,64,128,256,512], ablation=0):
         super(encoder, self).__init__()
         self.inc = DoubleConv(encoder_channels[0], encoder_channels[1])
         self.down1 = Down(encoder_channels[1], encoder_channels[2])
@@ -626,8 +574,8 @@ class encoder(nn.Module):
         self.down3 = DownsampleConv(encoder_channels[3], encoder_channels[4])
         self.down4 = DownsampleConv(encoder_channels[4], encoder_channels[4])
 
-        self.e4 = BasicLayer(dim=encoder_channels[4], depth=2)
-        self.e5 = BasicLayer(dim=encoder_channels[4], depth=2)
+        self.e4 = BasicLayer(dim=encoder_channels[4], depth=2, ablation=ablation)
+        self.e5 = BasicLayer(dim=encoder_channels[4], depth=2, ablation=ablation)
     def forward(self, x):
         outs = []
         x1 = self.inc(x)
@@ -650,11 +598,11 @@ class encoder(nn.Module):
 
 
 class decoder(nn.Module):
-    def __init__(self, encoder_channels=[3,64,128,256,512],bilinear=True,base_c: int = 64, outputs=1):
+    def __init__(self, encoder_channels=[3,64,128,256,512],bilinear=True,base_c: int = 64, outputs=1, ablation=1, include_AMM=True):
         super(decoder, self).__init__()
         self.outputs = outputs
         factor = 2 if bilinear else 1
-        self.d1 = BasicLayer(dim=encoder_channels[4] // factor, depth=2)
+        self.d1 = BasicLayer(dim=encoder_channels[4] // factor, depth=2, ablation=ablation)
         self.up1 = UpsampleConv(base_c * 16, base_c * 8 // factor, bilinear)
         self.up2 = Up(base_c * 8, base_c * 4 // factor, bilinear)
         self.up3 = Up(base_c * 4, base_c * 2 // factor, bilinear)
@@ -664,9 +612,15 @@ class decoder(nn.Module):
         if self.outputs == 2:
             self.edge_head = nn.Conv2d(base_c, 2, kernel_size=1)
 
-        self.attn1 = AMM(dim=encoder_channels[2])  # C2  128
-        self.attn2 = AMM(dim=encoder_channels[3])  # C3  256
-        self.attn3 = AMM(dim=encoder_channels[4])  # C4  512
+        self.include_AMM = include_AMM
+        if self.include_AMM:
+            self.attn1 = AMM(dim=encoder_channels[2])  # C2  128
+            self.attn2 = AMM(dim=encoder_channels[3])  # C3  256
+            self.attn3 = AMM(dim=encoder_channels[4])  # C4  512
+        else:
+            self.attn1 = torch.nn.Identity()
+            self.attn2 = torch.nn.Identity()
+            self.attn3 = torch.nn.Identity()
     def forward(self,x,h,w):
         c1,c2,c3,c4,c5=x[:5]
         B, _, H, W = c5.shape
@@ -687,10 +641,10 @@ class decoder(nn.Module):
 
 
 class MUNet(nn.Module):
-    def __init__(self, encoder_channels=[3,64,128,256,512], base_c=64, bilinear=True, outputs=1):
+    def __init__(self, encoder_channels=[3,64,128,256,512], base_c=64, bilinear=True, outputs=1, ablation=0, include_AMM=True):
         super(MUNet, self).__init__()
-        self.cnn_encoder=encoder(encoder_channels=encoder_channels)
-        self.trans_decoder=decoder(encoder_channels=encoder_channels, base_c=base_c, bilinear=bilinear, outputs=outputs)
+        self.cnn_encoder=encoder(encoder_channels=encoder_channels, ablation=ablation)
+        self.trans_decoder=decoder(encoder_channels=encoder_channels, base_c=base_c, bilinear=bilinear, outputs=outputs, ablation=ablation, include_AMM=include_AMM)
         # self.init_weight()
     def forward(self,x):
         h, w = x.size()[-2:]

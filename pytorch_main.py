@@ -58,6 +58,8 @@ def run(c):
         NDWI = c['NDWI']
         EVAL_FREQ = c['EVAL_FREQ']
         SCALE = c['SCALE']
+        ABLATION = c['ABLATION']
+        INCLUDE_AMM = c['INCLUDE_AMM']
 
         if DATASET == 'SWED':
             PATH = rf'.\sample\train'
@@ -91,7 +93,8 @@ def run(c):
                 "FRAMEWORK": 'pytorch',
                 "scaling factor": SCALE,
                 "DATE": now.strftime("%Y-%m-%d %H_%M_%S"),
-                "outputs": output_count
+                "outputs": output_count,
+                "ABLATION": ABLATION
                 }
             )
 
@@ -140,17 +143,15 @@ def run(c):
             channels = 4 if NDWI else 3
             m = DeepUNet(channels, SCALE, output_count)
             m.to(device)
-        elif MODEL == 'DeepUNet2':
-            m = DeepUNet2.get_model(data_loader_train.input_size, BATCH_SIZE)
         elif MODEL == 'SeNet':
             channels = 4 if NDWI else 3
             m = SeNet(channels, SCALE, output_count)
             m.to(device)
-        elif MODEL == 'SeNet2':
-            m = SeNet2.get_model(data_loader_train.input_size, BATCH_SIZE)
         elif MODEL == 'MU_Net':
             # m = MU_Net([32,64,128,256], base_c=32, bilinear=True)
-            m = MU_Net(encoder_channels=[4,32,64,128,256], base_c = 32, outputs=output_count)
+            encoder_channels = [i // SCALE for i in [4,64,128,256,512]]
+            encoder_channels[0] = 4 if NDWI else 3
+            m = MU_Net(encoder_channels=encoder_channels, base_c = 32, outputs=output_count, ablation=ABLATION, include_AMM=INCLUDE_AMM)
             # m = experimental.MUNet(encoder_channels=[4,32,64,128,256], base_c = 16)
             # m = OGMUNet.MUNet() #TODO: change later
             m.to(device)
@@ -337,9 +338,9 @@ if __name__ == '__main__':
     np.random.seed(seed)
     configs = [
         {
-        "MODEL": 'SeNet',
+        "MODEL": 'MU_Net',
         "EPOCHS":  100,
-        "BATCH_SIZE": 20,
+        "BATCH_SIZE": 10,
         "LEARNING_RATE":  1e-3,
         "TRAIN_PART":  0.7,
         "SCHEDULER": "poly",
@@ -350,17 +351,19 @@ if __name__ == '__main__':
         "OPTIMIZER": "Adam",
         "MOMENTUM": 0.9,
         "WEIGHT_DECAY": 1e-4,
-        "NOTE": f'Random seed: {seed} SeNet //2 DICE+CE Loss #3',
+        "NOTE": f'Random seed: {seed} MU_NET //2 DICE+CE Loss ABLATION 1',
         "PRECISION": 32,
         "NDWI": True,
         "EVAL_FREQ": 20,
-        "SCALE": 2
+        "SCALE": 2,
+        "ABLATION": 1,
+        "INCLUDE_AMM": True
         },
 
         {
-        "MODEL": 'SeNet', #SeNet
+        "MODEL": 'MU_Net',
         "EPOCHS":  100,
-        "BATCH_SIZE": 20,
+        "BATCH_SIZE": 10,
         "LEARNING_RATE":  1e-3,
         "TRAIN_PART":  0.7,
         "SCHEDULER": "poly",
@@ -371,11 +374,59 @@ if __name__ == '__main__':
         "OPTIMIZER": "Adam",
         "MOMENTUM": 0.9,
         "WEIGHT_DECAY": 1e-4,
-        "NOTE": f'Random seed: {seed} SeNet DICE+CE Loss #3',
+        "NOTE": f'Random seed: {seed} MU_NET //2 DICE+CE Loss ABLATION 2',
         "PRECISION": 32,
         "NDWI": True,
         "EVAL_FREQ": 20,
-        "SCALE": 1
+        "SCALE": 2,
+        "ABLATION": 2,
+        "INCLUDE_AMM": True
+        },
+
+        {
+        "MODEL": 'MU_Net',
+        "EPOCHS":  100,
+        "BATCH_SIZE": 10,
+        "LEARNING_RATE":  1e-3,
+        "TRAIN_PART":  0.7,
+        "SCHEDULER": "poly",
+        "DEBUG":  False,
+        "DATASET": "SWED_FULL",
+        "LOSS": 'Dice+Crossentropy', #Dice+Crossentropy SeNetLoss
+        "METRICS": 'BATCH',
+        "OPTIMIZER": "Adam",
+        "MOMENTUM": 0.9,
+        "WEIGHT_DECAY": 1e-4,
+        "NOTE": f'Random seed: {seed} MU_NET //2 DICE+CE Loss ABLATION 3',
+        "PRECISION": 32,
+        "NDWI": True,
+        "EVAL_FREQ": 20,
+        "SCALE": 2,
+        "ABLATION": 3,
+        "INCLUDE_AMM": True
+        },
+
+        {
+        "MODEL": 'MU_Net',
+        "EPOCHS":  100,
+        "BATCH_SIZE": 10,
+        "LEARNING_RATE":  1e-3,
+        "TRAIN_PART":  0.7,
+        "SCHEDULER": "poly",
+        "DEBUG":  False,
+        "DATASET": "SWED_FULL",
+        "LOSS": 'Dice+Crossentropy', #Dice+Crossentropy SeNetLoss
+        "METRICS": 'BATCH',
+        "OPTIMIZER": "Adam",
+        "MOMENTUM": 0.9,
+        "WEIGHT_DECAY": 1e-4,
+        "NOTE": f'Random seed: {seed} MU_NET //2 DICE+CE Loss ABLATION 4',
+        "PRECISION": 32,
+        "NDWI": True,
+        "EVAL_FREQ": 20,
+        "SCALE": 2,
+        "ABLATION": 4,
+        "INCLUDE_AMM": True
         },
     ]
     for cc in configs:
@@ -385,5 +436,7 @@ if __name__ == '__main__':
 
     for configuration in configs:
         # configuration['DEBUG'] = True
+        # configuration['EPOCHS'] = 1
+        print(configuration)
         run(configuration)
         # break
