@@ -21,6 +21,7 @@ class Train_Window(QMainWindow):
     def __init__(self, parent):
         super().__init__(parent)
         self.setWindowTitle("Training")
+        self.resize(1280, 720)
 
         wid = QWidget()
         self.setCentralWidget(wid)

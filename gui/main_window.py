@@ -30,12 +30,12 @@ class Window(QMainWindow):
     def show_train_window(self):
         if self.train_window.isHidden():
             self.train_window.show()
-            self.hide()
+            # self.hide()
 
     def show_inference_window(self):
         if self.inference_window.isHidden():
             self.inference_window.show()
-            self.hide()
+            # self.hide()
 
     def show_main_window(self):
         self.setWindowTitle(self.title)

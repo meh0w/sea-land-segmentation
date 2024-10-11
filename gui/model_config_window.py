@@ -15,6 +15,8 @@ class Model_Config_Window(QMainWindow):
     def __init__(self, parent, training):
         super().__init__(parent)
         self.setWindowTitle("Choose model config")
+
+        self.training = training
         wid = QWidget()
         self.setCentralWidget(wid)
         layout = QGridLayout()
@@ -69,7 +71,7 @@ class Model_Config_Window(QMainWindow):
         layout.addWidget(self.ablation_label, 4, 0)
         layout.addWidget(self.amm_label, 5, 0)
 
-        if training:
+        if self.training:
             self.epochs_sbox = QSpinBox()
             self.epochs_sbox.setRange(0, 1000000)
             self.epochs_sbox.setStepType(QAbstractSpinBox.AdaptiveDecimalStepType)
@@ -182,6 +184,29 @@ class Model_Config_Window(QMainWindow):
 
         wid.setLayout(layout)
 
+    def refresh_values(self):
+        print(self.parent().config['MODEL'])
+        self.model_cbox.setCurrentText(str(self.parent().config['MODEL']))
+        self.precision_cbox.setCurrentText(str(self.parent().config['PRECISION']))
+        self.NDWI_cbox.setCurrentText(str(self.parent().config['NDWI']))
+        self.scale_cbox.setCurrentText(str(self.parent().config['SCALE']))
+        self.ablation_cbox.setCurrentText(str(self.parent().config['ABLATION']))
+        self.amm_cbox.setCurrentText(str(self.parent().config['INCLUDE_AMM']))
+
+        if self.training:
+            self.epochs_sbox.setValue(self.parent().config['EPOCHS'])
+            self.batchsize_sbox.setValue(self.parent().config['BATCH_SIZE'])
+            self.lrate_sbox.setValue(self.parent().config['LEARNING_RATE'])
+            self.train_part_sbox.setValue(self.parent().config['TRAIN_PART'])
+            self.scheduler_cbox.setCurrentText(str(self.parent().config['SCHEDULER']))
+            DEBUG_text = str(not self.parent().config['DEBUG']) if type(self.parent().config['DEBUG']) == bool else self.parent().config['DEBUG']
+            self.debug_cbox.setCurrentText(DEBUG_text)
+            self.dataset_cbox.setCurrentText(str(self.parent().config['DATASET']))
+            self.loss_cbox.setCurrentText(str(self.parent().config['LOSS']))
+            self.optimizer_cbox.setCurrentText(str(self.parent().config['OPTIMIZER']))
+            self.momentum_sbox.setValue(self.parent().config['MOMENTUM'])
+            self.weight_decay_sbox.setValue(self.parent().config['WEIGHT_DECAY'])
+            self.eval_freq_sbox.setValue(self.parent().config['EVAL_FREQ'])
     def closeEvent(self, event):
         # return super().closeEvent(a0)
         print(self.parent().config)
