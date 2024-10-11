@@ -6,7 +6,7 @@ from pytorch_SeNet import SeNet
 from pytorch_MU_NET import MUNet as MU_Net
 import pytorch_MU_NET_exp as experimental
 import original_MU_Net as OGMUNet
-from pytorch_generator import DataLoaderSNOWED, DataLoaderSWED, DataLoaderSWED_NDWI, DataLoaderSWED_NDWI_np
+from pytorch_generator import DataLoaderSNOWED_NDWI, DataLoaderSNOWED, DataLoaderSWED, DataLoaderSWED_NDWI, DataLoaderSWED_NDWI_np
 import numpy as np
 from utils import get_file_names
 from datetime import datetime
@@ -70,6 +70,7 @@ def run(c):
         now = datetime.now()
         output_count = 2 if LOSS == 'SeNetLoss' else 1
         c['output_count'] = output_count
+        print(output_count)
         if not DEBUG:
         # # # start a new wandb run to track this script
             wandb.init(
@@ -112,10 +113,16 @@ def run(c):
                 data_set_valid = DataLoaderSWED(np.delete(img_files, idx), np.delete(label_files, idx), False, precision=PRECISION)
 
         elif DATASET == 'SNOWED':
-            img_files = get_file_names(PATH, '.npy', DATASET)
-            idx = np.random.choice(np.arange(len(img_files)), int(np.floor(len(img_files)*TRAIN_PART)), replace=False)
-            data_set_train = DataLoaderSNOWED(img_files[idx], False)
-            data_set_valid = DataLoaderSNOWED(np.delete(img_files, idx),False)
+            if NDWI:
+                img_files = get_file_names(PATH, '.npy', DATASET)
+                idx = np.random.choice(np.arange(len(img_files)), int(np.floor(len(img_files)*TRAIN_PART)), replace=False)
+                data_set_train = DataLoaderSNOWED_NDWI(img_files[idx], False, precision=PRECISION)
+                data_set_valid = DataLoaderSNOWED_NDWI(np.delete(img_files, idx),False, precision=PRECISION)
+            else:
+                img_files = get_file_names(PATH, '.npy', DATASET)
+                idx = np.random.choice(np.arange(len(img_files)), int(np.floor(len(img_files)*TRAIN_PART)), replace=False)
+                data_set_train = DataLoaderSNOWED(img_files[idx], False, precision=PRECISION)
+                data_set_valid = DataLoaderSNOWED(np.delete(img_files, idx),False, precision=PRECISION)
 
         elif DATASET == 'SWED_FULL':
             if NDWI:
@@ -151,7 +158,7 @@ def run(c):
             # m = MU_Net([32,64,128,256], base_c=32, bilinear=True)
             encoder_channels = [i // SCALE for i in [4,64,128,256,512]]
             encoder_channels[0] = 4 if NDWI else 3
-            m = MU_Net(encoder_channels=encoder_channels, base_c = 32, outputs=output_count, ablation=ABLATION, include_AMM=INCLUDE_AMM)
+            m = MU_Net(encoder_channels=encoder_channels, base_c = encoder_channels[1], outputs=output_count, ablation=ABLATION, include_AMM=INCLUDE_AMM)
             # m = experimental.MUNet(encoder_channels=[4,32,64,128,256], base_c = 16)
             # m = OGMUNet.MUNet() #TODO: change later
             m.to(device)
@@ -346,17 +353,17 @@ if __name__ == '__main__':
         "SCHEDULER": "poly",
         "DEBUG":  False,
         "DATASET": "SWED_FULL",
-        "LOSS": 'Dice+Crossentropy', #Dice+Crossentropy SeNetLoss
+        "LOSS": 'SeNetLoss', #Dice+Crossentropy SeNetLoss
         "METRICS": 'BATCH',
         "OPTIMIZER": "Adam",
         "MOMENTUM": 0.9,
         "WEIGHT_DECAY": 1e-4,
-        "NOTE": f'Random seed: {seed} MU_NET //2 DICE+CE Loss ABLATION 1',
+        "NOTE": f'Random seed: {seed} MU_Net //2 SeNetLoss',
         "PRECISION": 32,
         "NDWI": True,
         "EVAL_FREQ": 20,
         "SCALE": 2,
-        "ABLATION": 1,
+        "ABLATION": 0,
         "INCLUDE_AMM": True
         },
 
@@ -368,21 +375,42 @@ if __name__ == '__main__':
         "TRAIN_PART":  0.7,
         "SCHEDULER": "poly",
         "DEBUG":  False,
-        "DATASET": "SWED_FULL",
-        "LOSS": 'Dice+Crossentropy', #Dice+Crossentropy SeNetLoss
+        "DATASET": "SNOWED",
+        "LOSS": 'SeNetLoss', #Dice+Crossentropy SeNetLoss
         "METRICS": 'BATCH',
         "OPTIMIZER": "Adam",
         "MOMENTUM": 0.9,
         "WEIGHT_DECAY": 1e-4,
-        "NOTE": f'Random seed: {seed} MU_NET //2 DICE+CE Loss ABLATION 2',
+        "NOTE": f'Random seed: {seed} MU_Net //2 SeNetLoss',
         "PRECISION": 32,
         "NDWI": True,
         "EVAL_FREQ": 20,
         "SCALE": 2,
-        "ABLATION": 2,
+        "ABLATION": 0,
         "INCLUDE_AMM": True
         },
-
+        {
+        "MODEL": 'MU_Net',
+        "EPOCHS":  100,
+        "BATCH_SIZE": 10,
+        "LEARNING_RATE":  1e-3,
+        "TRAIN_PART":  0.7,
+        "SCHEDULER": "poly",
+        "DEBUG":  False,
+        "DATASET": "SNOWED",
+        "LOSS": 'SeNetLoss', #Dice+Crossentropy SeNetLoss
+        "METRICS": 'BATCH',
+        "OPTIMIZER": "Adam",
+        "MOMENTUM": 0.9,
+        "WEIGHT_DECAY": 1e-4,
+        "NOTE": f'Random seed: {seed} MU_Net SeNetLoss',
+        "PRECISION": 32,
+        "NDWI": True,
+        "EVAL_FREQ": 20,
+        "SCALE": 1,
+        "ABLATION": 0,
+        "INCLUDE_AMM": True
+        },
         {
         "MODEL": 'MU_Net',
         "EPOCHS":  100,
@@ -392,42 +420,20 @@ if __name__ == '__main__':
         "SCHEDULER": "poly",
         "DEBUG":  False,
         "DATASET": "SWED_FULL",
-        "LOSS": 'Dice+Crossentropy', #Dice+Crossentropy SeNetLoss
+        "LOSS": 'SeNetLoss', #Dice+Crossentropy SeNetLoss
         "METRICS": 'BATCH',
         "OPTIMIZER": "Adam",
         "MOMENTUM": 0.9,
         "WEIGHT_DECAY": 1e-4,
-        "NOTE": f'Random seed: {seed} MU_NET //2 DICE+CE Loss ABLATION 3',
+        "NOTE": f'Random seed: {seed} MU_Net SeNetLoss',
         "PRECISION": 32,
         "NDWI": True,
         "EVAL_FREQ": 20,
-        "SCALE": 2,
-        "ABLATION": 3,
+        "SCALE": 1,
+        "ABLATION": 0,
         "INCLUDE_AMM": True
         },
 
-        {
-        "MODEL": 'MU_Net',
-        "EPOCHS":  100,
-        "BATCH_SIZE": 10,
-        "LEARNING_RATE":  1e-3,
-        "TRAIN_PART":  0.7,
-        "SCHEDULER": "poly",
-        "DEBUG":  False,
-        "DATASET": "SWED_FULL",
-        "LOSS": 'Dice+Crossentropy', #Dice+Crossentropy SeNetLoss
-        "METRICS": 'BATCH',
-        "OPTIMIZER": "Adam",
-        "MOMENTUM": 0.9,
-        "WEIGHT_DECAY": 1e-4,
-        "NOTE": f'Random seed: {seed} MU_NET //2 DICE+CE Loss ABLATION 4',
-        "PRECISION": 32,
-        "NDWI": True,
-        "EVAL_FREQ": 20,
-        "SCALE": 2,
-        "ABLATION": 4,
-        "INCLUDE_AMM": True
-        },
     ]
     for cc in configs:
         print(f'{cc["MODEL"]}| {cc["DATASET"]} | {cc["LOSS"]} | {cc["LEARNING_RATE"]}')

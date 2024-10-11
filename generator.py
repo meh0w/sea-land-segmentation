@@ -36,8 +36,8 @@ class DataLoaderSWED(keras.utils.Sequence):
                 labels.append(np.moveaxis(to_sparse(np.load(label_file)[0]),0,-1).astype(np.float32))
         else:
             for img_file, label_file in zip(batch_x, batch_y):
-                images.append(np.moveaxis(tifffile.imread(img_file), 0, -1)[:,:,1:4].astype(np.float32)/22_000) #24_000
-                # images.append(np.moveaxis(tifffile.imread(img_file), 0, -1)[:,:,3:0:-1].astype(np.float32) / (10000*2.5277))
+                # images.append(np.moveaxis(tifffile.imread(img_file), 0, -1)[:,:,1:4].astype(np.float32)/22_000) #24_000
+                images.append(np.moveaxis(tifffile.imread(img_file), 0, -1)[:,:,3:0:-1].astype(np.float32) / (10000*2.5277))
                 # images.append(np.moveaxis(tifffile.imread(img_file), 0, -1)[:,:,1:4].astype(np.float32) / (10000*2.5277))
                 labels.append(np.moveaxis(to_sparse(tifffile.imread(label_file)),0,-1).astype(np.float32))
 

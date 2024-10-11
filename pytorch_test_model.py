@@ -246,8 +246,15 @@ def test_one_folder(folder, opts, result_folder=None, config=None):
         m = SeNet2.get_model(data_loader_train.input_size, BATCH_SIZE)
     elif 'MU_Net' in folder:
         output_count = config['output_count'] if 'output_count' in config else 1
+        upsample_mode = config['UPSAMPLE_MODE'] if 'UPSAMPLE_MODE' in config else 'bilinear'
+        encoder_channels = [i // SCALE for i in [4,64,128,256,512]]
+        encoder_channels[0] = 4 if NDWI else 3
+        base_c = encoder_channels[1]
+        ABLATION = config['ABLATION'] if 'ABLATION' in config else 0
+        INCLUDE_AMM = config['INCLUDE_AMM'] if 'INCLUDE_AMM' in config else True
+        
         # m = MU_Net([32,64,128,256], base_c=32, bilinear=False)
-        m = MU_Net([4,64,128,256,512]) #1st NDWI #OSIOSN1
+        m = MU_Net(encoder_channels, upsample_mode=upsample_mode, base_c = base_c, outputs=output_count, ablation=ABLATION, include_AMM=INCLUDE_AMM) #1st NDWI #OSIOSN1
         # m = MU_Net([4, 32,64,128,256], base_c=32) #OSIOSN2
         # m = experimental.MUNet([4, 32,64,128,256], base_c=32)
 
@@ -262,8 +269,11 @@ def test_one_folder(folder, opts, result_folder=None, config=None):
     if 'SWED' in folder:
         PATH = rf'.\SWED\test'
         img_files, label_files = get_file_names(PATH, '.tif', 'SWED')
-        # data_set_test = DataLoaderSWED(img_files, label_files, False)
-        data_set_test = DataLoaderSWED_NDWI(img_files, label_files, False)
+        if NDWI:
+            data_set_test = DataLoaderSWED_NDWI(img_files, label_files, False, inference=False)
+        else:
+            data_set_test = DataLoaderSWED(img_files, label_files, False)
+        
 
     elif 'SNOWED' in folder:
         PATH = rf'.\SNOWED_TEST'
@@ -330,13 +340,32 @@ if __name__ == '__main__':
 
     #SGD
         # folder = rf'weights\MU_Net\2024-09-10 03_21_11 Dice+Crossentropy SWED_FULL 1e-03 sample'
+    
+    #tab52
+        # folders = {
+        #     1: rf'weights\DeepUNet\24_12_2023 Sorensen_Dice SNOWED.jpg',
+        #     2: rf'weights\DeepUNet\2023-12-29 04_53_30 Weighted_Dice SNOWED 1e-06 sample.jpg',
+        #     3: rf'weights\DeepUNet\26_12_2023 Weighted_Dice+Crossentropy SNOWED sample.jpg',
+        #     4: rf'weights\DeepUNet\26_12_2023 Sorensen_Dice SWED sample.jpg',
+        #     5: rf'weights\DeepUNet\26_12_2023 Weighted_Dice SWED sample.jpg',
+        #     6: rf'weights\DeepUNet\26_12_2023 Weighted_Dice+Crossentropy SWED sample.jpg',
+        #     7: rf'weights\DeepUNet\2023-12-29 03_33_39 Weighted_Dice+Crossentropy SWED 1e-06 sample.txt',
+        #     8: rf'weights\SeNet\27_12_2023 Sorensen_Dice SNOWED sample.jpg',
+        #     9: rf'weights\SeNet\27_12_2023 Weighted_Dice SNOWED sample.jpg',
+        #     10: rf'weights\SeNet\26_12_2023 Weighted_Dice+Crossentropy SNOWED sample.jpg',
+        #     11: rf'weights\SeNet\27_12_2023 Sorensen_Dice SWED sample.jpg',
+        #     12: rf'weights\SeNet\27_12_2023 Weighted_Dice SWED sample.jpg',
+        #     13: rf'weights\SeNet\27_12_2023 Weighted_Dice+Crossentropy SWED sample.jpg',
+        #     14: rf'weights\SeNet\2023-12-29 02_11_31 Weighted_Dice+Crossentropy SWED 1e-06 sample.jpg',
+        # }
+    
     #NDWI
-        folders = {
+        # folders = {
             # 1: rf'weights\MU_Net\2024-04-12 01_00_48 Dice+Crossentropy SWED_FULL 1e-03 sample',
             # 2: rf'weights\MU_Net\2024-04-14 20_18_09 Dice+Crossentropy SWED_FULL 1e-03 sample',
             # 3: rf'weights\MU_Net\2024-04-16 02_28_26 Dice+Crossentropy SWED_FULL 1e-03 sample',
             # 4: rf'weights\MU_Net\2024-04-16 12_50_21 Dice+Crossentropy SWED_FULL 1e-03 sample'
-        }
+        # }
     #1.
     # folder rf'weights\MU_Net\2024-04-12 01_00_48 Dice+Crossentropy SWED_FULL 1e-03 sample'
     #2.
@@ -345,23 +374,47 @@ if __name__ == '__main__':
     # folder = rf'weights\MU_Net\2024-04-16 02_28_26 Dice+Crossentropy SWED_FULL 1e-03 sample'
     #4.
     # folder = rf'weights\MU_Net\2024-04-16 12_50_21 Dice+Crossentropy SWED_FULL 1e-03 sample'
-        # 'plots\NEW_IOU\SeNetLossvsDiceCE#{i}'
-        folders = {
+        # 'plots\NEW_IOU\SeNetLossvsDiceCE#{i}' SWED
+        # folders = {
             # 1: rf'weights\SeNet\2024-10-03 22_17_06 SeNetLoss SWED_FULL 1e-03 sample',
             # 2: rf'weights\SeNet\2024-10-04 09_53_56 SeNetLoss SWED_FULL 1e-03 sample',
-            3: rf'weights\SeNet\2024-10-05 12_38_26 Dice+Crossentropy SWED_FULL 1e-03 sample',
-            4: rf'weights\SeNet\2024-10-05 16_04_39 Dice+Crossentropy SWED_FULL 1e-03 sample',
+            # 3: rf'weights\SeNet\2024-10-05 12_38_26 Dice+Crossentropy SWED_FULL 1e-03 sample',
+            # 4: rf'weights\SeNet\2024-10-05 16_04_39 Dice+Crossentropy SWED_FULL 1e-03 sample',
             # 5: rf'weights\DeepUNet\2024-10-04 14_44_12 SeNetLoss SWED_FULL 1e-03 sample',
             # 6: rf'weights\DeepUNet\2024-10-04 18_23_22 SeNetLoss SWED_FULL 1e-03 sample',
             # 7: rf'weights\DeepUNet\2024-10-05 01_40_26 Dice+Crossentropy SWED_FULL 1e-03 sample',
             # 8: rf'weights\DeepUNet\2024-10-05 05_28_33 Dice+Crossentropy SWED_FULL 1e-03 sample',
-        
+        # }
+
+            # 'plots\NEW_IOU\SeNetLossvsDiceCE#{i}' SNOWED
+        # folders = {
+            # 9: rf'weights\SeNet\2024-10-07 16_21_10 SeNetLoss SNOWED 1e-03 sample',
+            # 10: rf'weights\SeNet\2024-10-07 16_34_49 SeNetLoss SNOWED 1e-03 sample',
+            # 11: rf'weights\SeNet\2024-10-07 14_29_49 Dice+Crossentropy SNOWED 1e-03 sample',
+            # 12: rf'weights\SeNet\2024-10-07 15_25_21 Dice+Crossentropy SNOWED 1e-03 sample',
+            # 13: rf'weights\DeepUNet\2024-10-08 02_52_49 SeNetLoss SNOWED 1e-03 sample',
+            # 14: rf'weights\DeepUNet\2024-10-08 03_39_53 SeNetLoss SNOWED 1e-03 sample',
+            # 15: rf'weights\DeepUNet\2024-10-08 01_00_44 Dice+Crossentropy SNOWED 1e-03 sample',
+            # 16: rf'weights\DeepUNet\2024-10-08 01_56_21 Dice+Crossentropy SNOWED 1e-03 sample',
+        # }
+            #MU_Net ablacje
+        folders = {
+            2: rf'weights\MU_Net\2024-10-05 22_31_15 Dice+Crossentropy SWED_FULL 1e-03 sample',
+            3: rf'weights\MU_Net\2024-10-06 04_18_33 Dice+Crossentropy SWED_FULL 1e-03 sample',
+            4: rf'weights\MU_Net\2024-10-06 11_23_08 Dice+Crossentropy SWED_FULL 1e-03 sample',
+            5: rf'weights\MU_Net\2024-10-06 18_30_12 Dice+Crossentropy SWED_FULL 1e-03 sample',
+            6: rf'weights\MU_Net\2024-10-07 03_51_53 Dice+Crossentropy SWED_FULL 1e-03 sample',
         }
+
         for i, folder in folders.items():
-            res = rf'plots\NEW_IOU\SeNetLossvsDiceCE#{i}'
+            res = rf'plots\NEW_IOU\MU_NET_ablacje\#{i}'
+            print(folder)
             with open(rf'{folder}\config.txt') as f:
                 config = ast.literal_eval(f.read())
             os.makedirs(res, exist_ok=True)
             test_one_folder(folder, optimize_options, res, config)
+
+
         # for folder in os.listdir(base):
         #     test_one_folder(rf'{base}\{folder}', res)
+        

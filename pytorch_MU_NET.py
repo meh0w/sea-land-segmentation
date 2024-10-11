@@ -531,15 +531,15 @@ class DownsampleConv(nn.Module):
 
 
 class Up(nn.Module):
-    def __init__(self, in_channels, out_channels, bilinear=True):
+    def __init__(self, in_channels, out_channels, bilinear=True, upsample_mode='bilinear'):
         super().__init__()
         # if bilinear, use the normal convolutions to reduce the number of channels
         if bilinear:
             # self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear')
+            self.up = nn.Upsample(scale_factor=2, mode=upsample_mode)
             self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
         else:
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear')
+            self.up = nn.Upsample(scale_factor=2, mode=upsample_mode)
             self.conv = DoubleConv(in_channels, out_channels, in_channels)
 
     def forward(self, x1, x2):
@@ -548,15 +548,15 @@ class Up(nn.Module):
         return self.conv(x)
 
 class UpsampleConv(nn.Module):
-    def __init__(self, in_channels, out_channels, bilinear=True):
+    def __init__(self, in_channels, out_channels, bilinear=True, upsample_mode='bilinear'):
         super().__init__()
         # if bilinear, use the normal convolutions to reduce the number of channels
         if bilinear:
             # self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear')
+            self.up = nn.Upsample(scale_factor=2, mode=upsample_mode)
             self.conv =ConvBNReLU(in_channels, out_channels,kernel_size=3)
         else:
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear')
+            self.up = nn.Upsample(scale_factor=2, mode=upsample_mode)
             self.conv =ConvBNReLU(in_channels, out_channels,kernel_size=3)
 
     def forward(self, x1, x2):
@@ -598,14 +598,14 @@ class encoder(nn.Module):
 
 
 class decoder(nn.Module):
-    def __init__(self, encoder_channels=[3,64,128,256,512],bilinear=True,base_c: int = 64, outputs=1, ablation=1, include_AMM=True):
+    def __init__(self, encoder_channels=[3,64,128,256,512],bilinear=True,base_c: int = 64, outputs=1, ablation=1, include_AMM=True, upsample_mode='bilinear'):
         super(decoder, self).__init__()
         self.outputs = outputs
         factor = 2 if bilinear else 1
         self.d1 = BasicLayer(dim=encoder_channels[4] // factor, depth=2, ablation=ablation)
-        self.up1 = UpsampleConv(base_c * 16, base_c * 8 // factor, bilinear)
-        self.up2 = Up(base_c * 8, base_c * 4 // factor, bilinear)
-        self.up3 = Up(base_c * 4, base_c * 2 // factor, bilinear)
+        self.up1 = UpsampleConv(base_c * 16, base_c * 8 // factor, bilinear, upsample_mode=upsample_mode)
+        self.up2 = Up(base_c * 8, base_c * 4 // factor, bilinear, upsample_mode=upsample_mode)
+        self.up3 = Up(base_c * 4, base_c * 2 // factor, bilinear, upsample_mode=upsample_mode)
         self.up4 = Up(base_c * 2, base_c, bilinear)
 
         self.segmentation_head = nn.Conv2d(base_c, 2, kernel_size=1)
@@ -641,10 +641,10 @@ class decoder(nn.Module):
 
 
 class MUNet(nn.Module):
-    def __init__(self, encoder_channels=[3,64,128,256,512], base_c=64, bilinear=True, outputs=1, ablation=0, include_AMM=True):
+    def __init__(self, encoder_channels=[3,64,128,256,512], base_c=64, bilinear=True, outputs=1, ablation=0, include_AMM=True, upsample_mode='bilinear'):
         super(MUNet, self).__init__()
         self.cnn_encoder=encoder(encoder_channels=encoder_channels, ablation=ablation)
-        self.trans_decoder=decoder(encoder_channels=encoder_channels, base_c=base_c, bilinear=bilinear, outputs=outputs, ablation=ablation, include_AMM=include_AMM)
+        self.trans_decoder=decoder(encoder_channels=encoder_channels, base_c=base_c, bilinear=bilinear, outputs=outputs, ablation=ablation, include_AMM=include_AMM, upsample_mode=upsample_mode)
         # self.init_weight()
     def forward(self,x):
         h, w = x.size()[-2:]
