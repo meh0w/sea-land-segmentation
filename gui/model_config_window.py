@@ -180,6 +180,23 @@ class Model_Config_Window(QMainWindow):
             layout.addWidget(self.momentum_label, 15, 0)
             layout.addWidget(self.weight_decay_label, 16, 0)
             layout.addWidget(self.eval_freq_label, 17, 0)
+        else:
+            self.dataloader_cbox = QComboBox()
+            self.dataloader_cbox.addItems(['<Not selected>', 'SWED', 'SNOWED'])
+            self.dataloader_cbox.setCurrentText(self.parent().config['DATA_LOADER'])
+            self.dataloader_cbox.currentTextChanged.connect(self.parent().change_loader)
+            self.dataloader_label = QLabel('Data loader: ')
+
+            self.outputs_cbox = QComboBox()
+            self.outputs_cbox.addItems(['<Not selected>', '1', '2'])
+            self.outputs_cbox.setCurrentText(str(self.parent().config['OUTPUTS']))
+            self.outputs_cbox.currentTextChanged.connect(self.parent().change_outputs)
+            self.outputs_label = QLabel('Output count: ')
+
+            layout.addWidget(self.outputs_cbox, 6, 1)
+            layout.addWidget(self.outputs_label, 6, 0)
+            layout.addWidget(self.dataloader_cbox, 7, 1)
+            layout.addWidget(self.dataloader_label, 7, 0)
             
 
         wid.setLayout(layout)
@@ -207,6 +224,9 @@ class Model_Config_Window(QMainWindow):
             self.momentum_sbox.setValue(self.parent().config['MOMENTUM'])
             self.weight_decay_sbox.setValue(self.parent().config['WEIGHT_DECAY'])
             self.eval_freq_sbox.setValue(self.parent().config['EVAL_FREQ'])
+        else:
+            self.dataloader_cbox.setCurrentText(self.parent().config['DATA_LOADER'])
+            self.outputs_cbox.setCurrentText(str(self.parent().config['OUTPUTS']))
     def closeEvent(self, event):
         # return super().closeEvent(a0)
         print(self.parent().config)

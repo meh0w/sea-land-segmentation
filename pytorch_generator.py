@@ -16,10 +16,6 @@ class DataLoaderSWED(Dataset):
             self.precision = torch.float32
         elif precision == 16:
             self.precision = torch.float16
-        if self.numpy:
-            self.input_size = (np.moveaxis(np.load(image_filenames[0]), 0, 0)[:,:,1:4]).shape
-        else:
-            self.input_size = (np.moveaxis(tifffile.imread(image_filenames[0]), 0, -1)[:,:,1:4]).shape
 
     def __len__(self) :
         return len(self.image_filenames)
@@ -199,3 +195,58 @@ class DataLoaderSNOWED_NDWI(Dataset):
         
     def get_all_labels(self):
         return torch.from_numpy(np.asarray([np.moveaxis(to_sparse(np.load(f'{self.root_path}/{folder_name}/label.npy')),0,0) for folder_name in self.folder_names[:self.__len__()*self.batch_size]]).astype(np.float32))
+
+
+class DataLoader_inference(DataLoaderSWED):
+    def __init__(self, image_filenames, labels, precision=32, NDWI=True, data_loader='SWED'):
+        super().__init__(image_filenames, labels, input_in_labels=False, precision=precision)
+
+        if data_loader == 'SWED':
+            if NDWI:
+                self.get_img = self.get_img_SWED_NDWI
+            else:
+                self.get_img = self.get_img_SWED
+
+        elif data_loader == 'SNOWED':
+            if NDWI:
+                self.get_img = self.get_img_SNOWED_NDWI
+            else:
+                self.get_img = self.get_img_SNOWED
+        else:
+            raise Exception('Dataloader incorrectly configured')
+
+    def __len__(self):
+        return max(len(self.image_filenames), len(self.labels))
+
+    def transform(self, im):
+        im[3,:,:] = (im[1,:,:] - im[3,:,:] + 1e-9) / (im[1,:,:] + im[3,:,:] + 1e-9)
+        return im
+    
+    def get_img_SWED_NDWI(self, idx):
+        return self.transform((torch.clamp(torch.from_numpy(tifffile.imread(self.image_filenames[idx])[[3,2,1,7],:,:].astype('int32')).to(self.precision)/22_000,min=0,max=1)))
+    
+    def get_img_SWED(self, idx):
+        return torch.clamp(torch.from_numpy(tifffile.imread(self.image_filenames[idx])[[3,2,1],:,:].astype('int32')).to(self.precision)/22_000,min=0,max=1)
+
+    def get_img_SNOWED(self, idx):
+        return torch.from_numpy(tifffile.imread(self.image_filenames[idx])[[3,2,1],:,:].astype(np.float32) / (10000*2.5277))
+    
+    def get_img_SNOWED_NDWI(self, idx):
+        return torch.from_numpy(self.transform(tifffile.imread(self.image_filenames[idx])[[3,2,1,7],:,:].astype(np.float32) / (10000*2.5277)))
+
+    def __getitem__(self, idx):
+        image, label = None, None
+        error = [False, False]
+        if len(self.image_filenames) > idx:
+            try:
+                image = self.get_img(idx)
+            except:
+                image = None
+                error[0] = True
+        if len(self.labels) > idx:
+            try:
+                label = torch.nn.functional.one_hot(torch.from_numpy(tifffile.imread(self.labels[idx]).astype('int32')).to(torch.int64), 2).to(self.precision).permute(2,0,1)
+            except:
+                label = None
+                error[1] = True
+        return image, label, error
