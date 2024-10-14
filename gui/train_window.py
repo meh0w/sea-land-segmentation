@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 import ast
 import numpy as np
 import os
+import sys
 
 from gui.model_config_window import Model_Config_Window
 
@@ -42,7 +43,7 @@ class Train_Window(QMainWindow):
             'OPTIMIZER': '<Not selected>',
             'MOMENTUM': 0.9,
             'WEIGHT_DECAY': 1e-4,
-            'PRECISION': '<Not selected>',
+            'PRECISION': 32,
             'NDWI': '<Not selected>',
             'EVAL_FREQ': 20,
             'SCALE': '<Not selected>',
@@ -62,9 +63,14 @@ class Train_Window(QMainWindow):
         self.train_button = QPushButton('Start training')
         self.train_button.clicked.connect(self.train)
 
+        self.stop_button = QPushButton('Stop training')
+        self.stop_button.clicked.connect(self.stop_train)
+        self.stop_button.setEnabled(False)
+
         layout.addWidget(self.text)
         layout.addWidget(self.cfg_button)
         layout.addWidget(self.train_button)
+        layout.addWidget(self.stop_button)
         wid.setLayout(layout)
 
     def closeEvent(self, event):
@@ -102,6 +108,12 @@ class Train_Window(QMainWindow):
             QProcess.Running: 'Running',
         }
         state_name = states[state]
+        if state_name == 'Running':
+            self.train_button.setEnabled(False)
+            self.stop_button.setEnabled(True)
+        elif state_name == 'Not running':
+            self.train_button.setEnabled(True)
+            self.stop_button.setEnabled(False)
         self.message(f"State changed: {state_name}")
 
     def train(self):
@@ -115,14 +127,20 @@ class Train_Window(QMainWindow):
             # args = ['train.py']
             config = self.config_to_args()
             args.extend(config)
-            self.process.start(r"C:\Users\Michal\Documents\pip_venvs\pt\Scripts\python", args)
+            path_to_venv_python = sys.executable
+            self.process.start(path_to_venv_python, args)
             self.process.finished.connect(self.training_ended)
+
+    def stop_train(self):
+        self.process.kill()
+        self.stop_button.setEnabled(False)
+        self.train_button.setEnabled(True)
 
     def config_to_args(self):
         args = []
         for key, value in self.config.items():
             args.append(f'--{key}')
-            args.append(f'{value}')
+            args.append(f'{value}'.replace('-','_'))
 
         return args
 
@@ -215,12 +233,12 @@ class Train_Window(QMainWindow):
 
     def change_optimizer(self, v):
         self.config['OPTIMIZER'] = v
-        if v == 'SGD':
-            self.model_config_window.momentum_sbox.setEnabled(True)
-            self.model_config_window.weight_decay_sbox.setEnabled(True)
-        else:
-            self.model_config_window.momentum_sbox.setEnabled(False)
-            self.model_config_window.weight_decay_sbox.setEnabled(False)
+        # if v == 'SGD':
+        #     self.model_config_window.momentum_sbox.setEnabled(True)
+        #     self.model_config_window.weight_decay_sbox.setEnabled(True)
+        # else:
+        #     self.model_config_window.momentum_sbox.setEnabled(False)
+        #     self.model_config_window.weight_decay_sbox.setEnabled(False)
 
     def change_momentum(self, v):
         self.config['MOMENTUM'] = float(v) if v != '<Not selected>' else v

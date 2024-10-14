@@ -5,6 +5,7 @@ import SeNet
 import SeNet2
 import os
 import matplotlib.pyplot as plt
+plt.switch_backend('agg')
 from generator import DataLoaderSWED, DataLoaderSNOWED
 from utils import get_file_names, to_sparse
 from tensorflow.keras.layers import Softmax
@@ -16,7 +17,7 @@ import MU_Net
 # from tensorflow.python.framework.ops import disable_eager_execution
 # disable_eager_execution()
 
-def test(data_path, weights_path, data_loader, m, display, save, result_path):
+def test(data_path, weights_path, data_loader, m, display, save, results_folder, results_file):
     # PATH = rf'.\SWED\test'
     BATCH_SIZE = 1
 
@@ -54,20 +55,28 @@ def test(data_path, weights_path, data_loader, m, display, save, result_path):
     test[' IoU_water_new'] = IoU_water[0]
     test[' IoU mean_new'] = IoU_mean[0]
     # pprint(f'TEST metrics: {test}')
-    with open(rf'{result_path}.txt', 'w') as f:
+    with open(rf'{results_folder}/metrics_{results_file}.txt', 'w') as f:
         for key, value in test.items():
             print(f'{key}: {np.round(value, 4):.4f} \n')
             f.write(f'{key}: {np.round(value, 4):.4f} \n')
     # return
     *_, last1, last2,last3 = data_eval
     # print(len(img_files))
-    for entry in [data_eval[0],data_eval[1],data_eval[2], last1, last2,last3]:
-        i = entry['idx']
-        print(entry['iou'])
-    # for i in range(len(predicted)):
-        if number_of_rows > 1:
+
+    separated = True
+    no_predictions = False
+    if separated:
+        fig_img, ax_img = plt.subplots(1, 1, figsize=(1, 1))
+        fig_pred, ax_pred = plt.subplots(1, 1, figsize=(1, 1))
+        fig_label, ax_label = plt.subplots(1, 1, figsize=(1, 1))
+        for row_num, entry in enumerate([data_eval[0],data_eval[1],data_eval[2], last1, last2,last3]):
+            i = entry['idx']
+            fig_img, ax_img = plt.subplots(1, 1, figsize=(1, 1))
+            fig_pred, ax_pred = plt.subplots(1, 1, figsize=(1, 1))
+            fig_label, ax_label = plt.subplots(1, 1, figsize=(1, 1))
+
             if isinstance(data_loader, DataLoaderSWED):
-                # rgb = data_loader[i][0][0][:,:,:,[2, 1,0]][0]
+                    # rgb = data_loader[i][0][0][:,:,:,[2, 1,0]][0]
                 if data_loader.biases is None:
                     rgb = data_loader[i][0][0][:,:,[2, 1,0]]
                 else:
@@ -76,57 +85,132 @@ def test(data_path, weights_path, data_loader, m, display, save, result_path):
                 if data_loader.biases is None:
                     rgb = data_loader[i][0][0][:,:,:,[0,1,2]][0]
                 else:
-                    rgb = data_loader[i][0][0][0][:,:,[2, 1,0]]
+                    rgb = data_loader[i][0][0][0][:,:,[0, 1,2]]
+
             rgb = (rgb-np.min(rgb))/(np.max(rgb)-np.min(rgb))
-            clipped = np.clip(rgb, 0, 0.6)/0.6
-            # clipped = rgb
-            
-            # clipped = rgb
-            # ax[j, 0].hist(rgb[:,:,0].flatten(), bins=100)
-            # ax[j, 1].hist(rgb[:,:,1].flatten(), bins=100)
-            # ax[j, 2].hist(rgb[:,:,2].flatten(), bins=100)
-            # ax[j, 0].imshow((rgb-np.min(rgb))/(np.max(rgb)-np.min(rgb)))
-            ax[j, 0].imshow(clipped)
-            ax[j, 1].imshow(predicted[i])
-            ax[j, 2].imshow(real[i])
+            percentile = np.percentile(rgb, 99)
+            clipped = np.clip(rgb, 0, percentile) / percentile
 
-            ax[j, 0].set_xticks([])
-            ax[j, 0].set_yticks([])
+            if no_predictions:
+                ax_img.imshow(clipped)
+                ax_label.imshow(real[i])
 
-            ax[j, 1].set_xticks([])
-            ax[j, 1].set_yticks([])
+                ax_img.set_xticks([])
+                ax_img.set_yticks([])
 
-            ax[j, 2].set_xticks([])
-            ax[j, 2].set_yticks([])
-            
-        else:
-            rgb = data_loader[i][0][:,:,:,[0,1,2]][0]
-            # ax[0].imshow((rgb-np.min(rgb))/(np.max(rgb)-np.min(rgb)))
-            ax[0].imshow((rgb-np.min(rgb))/(np.max(rgb)-np.min(rgb)))
-            ax[1].imshow(predicted[i])
-            ax[2].imshow(real[i])
+                ax_label.set_xticks([])
+                ax_label.set_yticks([])
+            else:
+                ax_img.imshow(clipped)
+                ax_pred.imshow(predicted[i])
+                ax_label.imshow(real[i])
 
-            ax[0].set_xticks([])
-            ax[0].set_yticks([])
+                ax_img.set_xticks([])
+                ax_img.set_yticks([])
 
-            ax[1].set_xticks([])
-            ax[1].set_yticks([])
+                ax_pred.set_xticks([])
+                ax_pred.set_yticks([])
 
-            ax[2].set_xticks([])
-            ax[2].set_yticks([])
+                ax_label.set_xticks([])
+                ax_label.set_yticks([])
 
-        j += 1
-        if j == number_of_rows:
-            # plt.subplots_adjust(0.021, 0.012, 0.376, 0.998, 0, 0.067)
-            plt.subplots_adjust(0, 0, 1, 1, 0, 0)
-            if display:
-                plt.show()
-            if save:
-                fig.set_size_inches(2.4,4.75)
-                plt.savefig(f'{result_path}.jpg', dpi=600)
-            fig, ax = plt.subplots(5, 3)
-            j = 0
-        print(j)
+            if no_predictions:
+                fig_img.subplots_adjust(0, 0, 1, 1, 0, 0)
+                fig_label.subplots_adjust(0, 0, 1, 1, 0, 0)
+                if save:
+                    # fig.set_size_inches(2.4,4.75)
+                    fig_img.savefig(f'{results_folder}/img_{row_num}_{results_file}_no_pred.jpg', dpi=600)
+                    fig_label.savefig(f'{results_folder}/label_{row_num}_{results_file}_no_pred.jpg', dpi=600)
+                if display:
+                    fig_img.show()
+                    fig_label.show()
+                plt.close(fig_img)
+                plt.close(fig_pred)
+                plt.close(fig_label)
+
+            else:
+                fig_img.subplots_adjust(0, 0, 1, 1, 0, 0)
+                fig_pred.subplots_adjust(0, 0, 1, 1, 0, 0)
+                fig_label.subplots_adjust(0, 0, 1, 1, 0, 0)
+                if save:
+                    # fig.set_size_inches(2.4,4.75)
+                    fig_img.savefig(f'{results_folder}/img_{row_num}_{results_file}_{np.round(entry["iou"], 4)*100:.2f}.jpg', dpi=600)
+                    fig_pred.savefig(f'{results_folder}/pred_{row_num}_{results_file}_{np.round(entry["iou"], 4)*100:.2f}.jpg', dpi=600)
+                    fig_label.savefig(f'{results_folder}/label_{row_num}_{results_file}_{np.round(entry["iou"], 4)*100:.2f}.jpg', dpi=600)
+                if display:
+                    fig_img.show()
+                    fig_pred.show()
+                    fig_label.show()
+                plt.close(fig_img)
+                plt.close(fig_pred)
+                plt.close(fig_label)
+    else:
+        for entry in [data_eval[0],data_eval[1],data_eval[2], last1, last2,last3]:
+            i = entry['idx']
+            print(entry['iou'])
+        # for i in range(len(predicted)):
+            if number_of_rows > 1:
+                if isinstance(data_loader, DataLoaderSWED):
+                    # rgb = data_loader[i][0][0][:,:,:,[2, 1,0]][0]
+                    if data_loader.biases is None:
+                        rgb = data_loader[i][0][0][:,:,[2, 1,0]]
+                    else:
+                        rgb = data_loader[i][0][0][0][:,:,[2, 1,0]]
+                else:
+                    if data_loader.biases is None:
+                        rgb = data_loader[i][0][0][:,:,:,[0,1,2]][0]
+                    else:
+                        rgb = data_loader[i][0][0][0][:,:,[2, 1,0]]
+                rgb = (rgb-np.min(rgb))/(np.max(rgb)-np.min(rgb))
+                clipped = np.clip(rgb, 0, 0.6)/0.6
+                # clipped = rgb
+                
+                # clipped = rgb
+                # ax[j, 0].hist(rgb[:,:,0].flatten(), bins=100)
+                # ax[j, 1].hist(rgb[:,:,1].flatten(), bins=100)
+                # ax[j, 2].hist(rgb[:,:,2].flatten(), bins=100)
+                # ax[j, 0].imshow((rgb-np.min(rgb))/(np.max(rgb)-np.min(rgb)))
+                ax[j, 0].imshow(clipped)
+                ax[j, 1].imshow(predicted[i])
+                ax[j, 2].imshow(real[i])
+
+                ax[j, 0].set_xticks([])
+                ax[j, 0].set_yticks([])
+
+                ax[j, 1].set_xticks([])
+                ax[j, 1].set_yticks([])
+
+                ax[j, 2].set_xticks([])
+                ax[j, 2].set_yticks([])
+                
+            else:
+                rgb = data_loader[i][0][:,:,:,[0,1,2]][0]
+                # ax[0].imshow((rgb-np.min(rgb))/(np.max(rgb)-np.min(rgb)))
+                ax[0].imshow((rgb-np.min(rgb))/(np.max(rgb)-np.min(rgb)))
+                ax[1].imshow(predicted[i])
+                ax[2].imshow(real[i])
+
+                ax[0].set_xticks([])
+                ax[0].set_yticks([])
+
+                ax[1].set_xticks([])
+                ax[1].set_yticks([])
+
+                ax[2].set_xticks([])
+                ax[2].set_yticks([])
+
+            j += 1
+            if j == number_of_rows:
+                # plt.subplots_adjust(0.021, 0.012, 0.376, 0.998, 0, 0.067)
+                plt.subplots_adjust(0, 0, 1, 1, 0, 0)
+                if display:
+                    plt.show()
+                if save:
+                    fig.set_size_inches(2.4,4.75)
+                    plt.savefig(f'{results_folder}/{results_file}.jpg', dpi=600)
+                fig, ax = plt.subplots(5, 3)
+                j = 0
+            print(j)
 
     # metrics = all_metrics()
 
@@ -191,7 +275,7 @@ def test_one_folder(folder, result_folder=None, test_set=""):
             b6 = MU_Net.get_bias()
             biases = stack([b1,b2,b3,b4,b5,b6])
 
-    if ('SWED' in folder and test_set != 'SNOWED') or test_set == 'SWED':
+    if True or ('SWED' in folder and test_set != 'SNOWED') or test_set == 'SWED':
         data = rf'.\SWED\test'
         img_files, label_files = get_file_names(data, '.tif', 'SWED')
         loader = DataLoaderSWED(img_files, label_files, BATCH_SIZE, False, biases=biases)
@@ -239,8 +323,9 @@ def test_one_folder(folder, result_folder=None, test_set=""):
         raise Exception('Results folder not specified')
     else:
         file = folder.split('\\')[-1]
-        result_path = rf"{result_folder}\{file}"
-        test(data, weights, loader, model, display, save, result_path)
+        result_folder = rf"{result_folder}"
+        results_file = rf"{file}"
+        test(data, weights, loader, model, display, save, result_folder, results_file)
 
 if __name__ == '__main__':
     base = rf'weights\MU_Net\REPORT 09-03-2024'
@@ -256,12 +341,12 @@ if __name__ == '__main__':
     # 3: rf'weights\DeepUNet2\26_12_2023 Weighted_Dice+Crossentropy SNOWED sample',
     # #4.
     # 4: rf'weights\DeepUNet\26_12_2023 Sorensen_Dice SWED sample',
-    # #5.
+    # # #5.
     # 5: rf'weights\DeepUNet\26_12_2023 Weighted_Dice SWED sample',
-    # #6.
-    # # folder = rf'weights\DeepUNet2\2023-12-28 22_11_25 Weighted_Dice+Crossentropy SWED 1e-04 sample'
+    # # #6.
+    # # # folder = rf'weights\DeepUNet2\2023-12-28 22_11_25 Weighted_Dice+Crossentropy SWED 1e-04 sample'
     # 6: rf'weights\DeepUNet2\26_12_2023 Weighted_Dice+Crossentropy SWED sample',
-    # #7.
+    # # #7.
     # 7: rf'weights\DeepUNet2\2023-12-29 03_33_39 Weighted_Dice+Crossentropy SWED 1e-06 sample',
     # #8.
     # 8: rf'weights\SeNet\27_12_2023 Sorensen_Dice SNOWED sample',
@@ -271,53 +356,60 @@ if __name__ == '__main__':
     # 10: rf'weights\SeNet2\26_12_2023 Weighted_Dice+Crossentropy SNOWED sample',
     # #11.?
     # 11: rf'weights\SeNet\27_12_2023 Sorensen_Dice SWED sample',
-    # #12.?~
+    # # #12.?~
     # 12: rf'weights\SeNet\27_12_2023 Weighted_Dice SWED sample',
-    # #13.?
+    # # #13.?
     # 13: rf'weights\SeNet2\27_12_2023 Weighted_Dice+Crossentropy SWED sample',
-    # #14.?~
+    # # #14.?~
     # 14: rf'weights\SeNet2\2023-12-29 02_11_31 Weighted_Dice+Crossentropy SWED 1e-06 sample',
     # }
     #Tab 5.5
-    folders = {
+    # folders = {
     #1.
-    1:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 12_53_30 Dice+Crossentropy SWED 1e-03 sample',
-    #2.
-    2:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 15_11_23 Dice+Crossentropy SWED 1e-03 sample',
-    #3.
-    3:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 17_24_06 Dice+Crossentropy SWED 1e-03 sample',
-    #4.
-    4:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 19_23_00 Dice+Crossentropy SWED 1e-03 sample',
-    #5.
-    5:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 22_21_17 Dice+Crossentropy SWED 1e-03 sample',
-    #6.
-    6:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 23_11_14 Dice+Crossentropy SWED 1e-03 sample',
-    #7.
-    7:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-09 01_42_36 Dice+Crossentropy SWED 1e-03 sample',
-    #8.
-    8:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-06 03_13_09 Dice+Crossentropy SNOWED 1e-03 sample',
-    #9.
-    9:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-06 09_23_00 Dice+Crossentropy SNOWED 1e-03 sample',
-    #10.
-    10:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-06 14_07_07 Dice+Crossentropy SNOWED 1e-03 sample',
+    # 1:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 12_53_30 Dice+Crossentropy SWED 1e-03 sample',
+    # #2.
+    # 2:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 15_11_23 Dice+Crossentropy SWED 1e-03 sample',
+    # #3.
+    # 3:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 17_24_06 Dice+Crossentropy SWED 1e-03 sample',
+    # #4.
+    # 4:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 19_23_00 Dice+Crossentropy SWED 1e-03 sample',
+    # #5.
+    # 5:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 22_21_17 Dice+Crossentropy SWED 1e-03 sample',
+    # #6.
+    # 6:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 23_11_14 Dice+Crossentropy SWED 1e-03 sample',
+    # #7.
+    # 7:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-09 01_42_36 Dice+Crossentropy SWED 1e-03 sample',
+    # #8.
+    # 8:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-06 03_13_09 Dice+Crossentropy SNOWED 1e-03 sample',
+    # #9.
+    # 9:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-06 09_23_00 Dice+Crossentropy SNOWED 1e-03 sample',
+    # #10.
+    # 10:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-06 14_07_07 Dice+Crossentropy SNOWED 1e-03 sample',
     #11.
-    11:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-07 02_56_47 Dice+Crossentropy SNOWED 1e-03 sample',
-    #12.
-    12:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-07 12_48_20 Dice+Crossentropy SNOWED 1e-03 sample',
-    #13.
-    13:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-07 17_00_55 Dice+Crossentropy SNOWED 1e-03 sample',
-    #14.
-    14:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 04_29_27 Dice+Crossentropy SNOWED 1e-03 sample',
-    }
+    # 11:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-07 02_56_47 Dice+Crossentropy SNOWED 1e-03 sample',
+    # #12.
+    # 12:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-07 12_48_20 Dice+Crossentropy SNOWED 1e-03 sample',
+    # #13.
+    # 13:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-07 17_00_55 Dice+Crossentropy SNOWED 1e-03 sample',
+    # #14.
+    # 14:rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 04_29_27 Dice+Crossentropy SNOWED 1e-03 sample',
+    # }
     #NDWI
-    #1.
-    # folder rf'weights\MU_Net\2024-04-12 01_00_48 Dice+Crossentropy SWED_FULL 1e-03 sample'
-    #2.
-    # folder = rf'weights\MU_Net\2024-04-14 20_18_09 Dice+Crossentropy SWED_FULL 1e-03 sample'
-    #3.
-    # folder = rf'weights\MU_Net\2024-04-16 02_28_26 Dice+Crossentropy SWED_FULL 1e-03 sample'
-    #4.
-    # folder = rf'weights\MU_Net\2024-04-16 12_50_21 Dice+Crossentropy SWED_FULL 1e-03 sample'
+    # folders = {
+    #     #1.
+    #     1: rf'weights\MU_Net\2024-04-12 01_00_48 Dice+Crossentropy SWED_FULL 1e-03 sample',
+    #     #2.
+    #     2: rf'weights\MU_Net\2024-04-14 20_18_09 Dice+Crossentropy SWED_FULL 1e-03 sample',
+    #     #3.
+    #     3: rf'weights\MU_Net\2024-04-16 02_28_26 Dice+Crossentropy SWED_FULL 1e-03 sample',
+    #     #4.
+    #     4: rf'weights\MU_Net\2024-04-16 12_50_21 Dice+Crossentropy SWED_FULL 1e-03 sample',
+    # }
+
+    folders = {
+        1: rf'weights\DeepUNet\02_11_2023',
+        2: rf'weights\SeNet\02_11_2023'
+    }
 
     # folder = rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 12_53_30 Dice+Crossentropy SWED 1e-03 sample'
     # folder = rf'weights\MU_Net\REPORT 09-03-2024\2024-03-08 12_53_30 Dice+Crossentropy SWED 1e-03 sample'
@@ -325,7 +417,7 @@ if __name__ == '__main__':
     # folder = rf'weights\DeepUNet\26_12_2023 Sorensen_Dice SWED sample'
     # folder = rf'weights\MU_Net\REPORT 09-03-2024\2024-03-07 02_56_47 Dice+Crossentropy SNOWED 1e-03 sample' #SNOWED_Adam_(2)
     for i, folder in folders.items():
-        res = rf'plots\NEW_IOU\tab55#{i}'
+        res = rf'plots\NEW_IOU\new_contrast\Wstepne\#{i}'
         os.makedirs(res, exist_ok=True)
         test_one_folder(folder, res)
     # for folder in os.listdir(base):

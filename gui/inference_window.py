@@ -73,7 +73,7 @@ class Inference_Window(QMainWindow):
 
         self.config = {
             'MODEL': '<Not selected>',
-            'PRECISION': '<Not selected>',
+            'PRECISION': 32,
             'NDWI': '<Not selected>',
             'SCALE': '<Not selected>',
             'ABLATION': '<Not selected>',

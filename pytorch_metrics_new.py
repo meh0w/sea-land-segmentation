@@ -246,7 +246,7 @@ class All_metrics:
         exclusion_land = torch.count_nonzero(exclusion==LAND, dim=(1,2))          #FN
         exclusion_water = torch.count_nonzero(exclusion==WATER, dim=(1,2))        #FP
 
-        self.add_to_confusion_matrix(intersect_land,intersect_water,exclusion_land,exclusion_water)
+        self.add_to_confusion_matrix(intersect_land.sum(),intersect_water.sum(),exclusion_land.sum(),exclusion_water.sum())
 
         IoU_land = (intersect_land + self.smooth) / (union_land + self.smooth)
         IoU_water = (intersect_water + self.smooth) / (union_water + self.smooth)
