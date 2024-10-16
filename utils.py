@@ -2,6 +2,7 @@ import numpy as np
 import os
 from tifffile import tifffile
 import matplotlib.pyplot as plt
+import pickle
 # import tensorflow as tf
 
 # a utility function to add weight decay after the model is defined.
@@ -66,14 +67,24 @@ def load_data(path, part):
 def get_file_names(path, extension, dataset="SWED"):
 
     if dataset == "SWED" or dataset == "SWED_FULL":
+        # exclude image+label pairs with incorrect labels
+        # (values different than 0 or 1)
+        with open('utils/exclude_imgs.pickle', 'rb') as f:
+            excluded_imgs = pickle.load(f) 
+
+        with open('utils/exclude_labels.pickle', 'rb') as f:
+            excluded_labels = pickle.load(f)
+            
         ims, labs = [], []
         for file in os.listdir(rf'{path}/images'):
             if file.endswith(extension):
-                ims.append(rf'{path}/images/{file}')
+                if file not in excluded_imgs:
+                    ims.append(rf'{path}/images/{file}')
 
         for file in os.listdir(rf'{path}/labels'):
             if file.endswith(extension):
-                labs.append(rf'{path}/labels/{file}')
+                if file not in excluded_labels:
+                    labs.append(rf'{path}/labels/{file}')
         return np.asarray(ims), np.asarray(labs)
     elif dataset == "SNOWED":
         # due to file structure we only need folder names
